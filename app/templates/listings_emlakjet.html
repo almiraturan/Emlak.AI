@@ -433,6 +433,16 @@
         color: #e9d5ff;
     }
 
+    .listing-source.is-toki {
+        background: rgba(16, 185, 129, 0.18);
+        color: #a7f3d0;
+    }
+
+    .listing-source.is-hepsiemlak {
+        background: rgba(249, 115, 22, 0.18);
+        color: #ffedd5;
+    }
+
     .listing-price {
         display: flex;
         align-items: center;
@@ -1174,7 +1184,21 @@
         const priceVerdict = listing.price_verdict || 'fair';
         const priceValue = Number(listing.price || 0);
         const source = (listing.source || '').toLowerCase();
-        const sourceLabel = source === 'emlakjet' ? 'EmlakJet' : (source || 'seed');
+        
+        let sourceLabel = 'Seed';
+        let sourceClass = 'is-seed';
+        if (source === 'emlakjet') {
+            sourceLabel = 'EmlakJet';
+            sourceClass = 'is-emlakjet';
+        } else if (source === 'toki') {
+            sourceLabel = 'TOKİ';
+            sourceClass = 'is-toki';
+        } else if (source === 'hepsiemlak') {
+            sourceLabel = 'Hepsiemlak';
+            sourceClass = 'is-hepsiemlak';
+        } else if (source) {
+            sourceLabel = source.charAt(0).toUpperCase() + source.slice(1);
+        }
 
         let verdictClass = 'fair';
         let verdictText = 'Adil';
@@ -1199,7 +1223,7 @@
                         onclick="event.stopPropagation(); toggleCompare(${listing.id}, this)">⚖️</button>
                 <div class="listing-header">
                     <h3 class="listing-title">${listing.title || 'Untitled'}</h3>
-                    ${source === 'emlakjet' ? `<span class="listing-source is-emlakjet">${sourceLabel}</span>` : ''}
+                    <span class="listing-source ${sourceClass}">${sourceLabel}</span>
                 </div>
 
                 <div class="listing-body">

@@ -2,6 +2,41 @@
 
 {% block title %}Analiz - EmlakAI{% endblock %}
 
+{% block extra_css %}
+<style>
+    .detail-save-btn {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(10, 15, 30, 0.65);
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 1.3rem;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        transition: transform 0.15s, background 0.15s, color 0.15s;
+        outline: none;
+    }
+    .detail-save-btn:hover {
+        transform: scale(1.08);
+    }
+    .detail-save-btn.is-saved {
+        background: rgba(220, 38, 38, 0.22);
+        border-color: rgba(248, 113, 113, 0.4);
+        color: #fecaca;
+    }
+    .result-listing-header-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-radius: 16px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="analyze-page">
     <section class="analyze-header">
@@ -52,6 +87,15 @@
 
     <!-- Results -->
     <div id="resultsContainer" class="results-container" style="display:none;">
+        <!-- Listing Header Card -->
+        <div class="result-card glass result-listing-header-card">
+            <div>
+                <h2 id="listingTitle" style="margin: 0; font-size: 1.8rem; color: #fff;">-</h2>
+                <p id="listingLocationAndPrice" style="margin: 0.5rem 0 0 0; color: rgba(255, 255, 255, 0.7); font-size: 1.05rem;">-</p>
+            </div>
+            <button id="detailSaveBtn" class="detail-save-btn" type="button" title="Kaydet" onclick="toggleDetailSave()">🤍</button>
+        </div>
+
         <!-- Profile Result -->
         <div class="result-card glass result-profile">
             <div class="result-header">
@@ -200,6 +244,8 @@
 {% block extra_js %}
 <script>
     const DEMO_USER_ID = 1;
+    let isCurrentlySaved = false;
+    let currentListingId = null;
 
     document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
@@ -286,6 +332,19 @@
     }
 
     function displayResults(data) {
+        // Listing Info
+        if (data.listing) {
+            const listing = data.listing;
+            document.getElementById('listingTitle').textContent = listing.title || 'İlan';
+            const priceText = listing.price ? `₺${Math.round(listing.price).toLocaleString('tr-TR')}` : 'Fiyat belirtilmemiş';
+            const locParts = [listing.neighborhood, listing.district, listing.city].filter(Boolean);
+            const locText = locParts.length > 0 ? locParts.join(', ') : 'Konum bilgisi yok';
+            document.getElementById('listingLocationAndPrice').textContent = `${priceText} · ${locText}`;
+            
+            // Check and update save status
+            updateSaveButtonStatus(listing.id);
+        }
+
         // Profile
         if (data.profile) {
             document.getElementById('clusterLabel').textContent = 
@@ -396,6 +455,64 @@
         if (data.total_duration_ms) {
             document.getElementById('analysisDuration').textContent = 
                 Math.round(data.total_duration_ms);
+        }
+    }
+
+    async function updateSaveButtonStatus(listingId) {
+        currentListingId = listingId;
+        const btn = document.getElementById('detailSaveBtn');
+        try {
+            const res = await fetch(`/api/saved/status/${listingId}?user_id=${DEMO_USER_ID}`);
+            if (res.ok) {
+                const data = await res.json();
+                isCurrentlySaved = data.saved;
+                if (isCurrentlySaved) {
+                    btn.classList.add('is-saved');
+                    btn.textContent = '❤️';
+                    btn.title = 'Kaydedildi';
+                } else {
+                    btn.classList.remove('is-saved');
+                    btn.textContent = '🤍';
+                    btn.title = 'Kaydet';
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to fetch save status', err);
+        }
+    }
+
+    async function toggleDetailSave() {
+        if (!currentListingId) return;
+        const btn = document.getElementById('detailSaveBtn');
+        btn.disabled = true;
+        try {
+            if (isCurrentlySaved) {
+                const res = await fetch(`/api/saved/${currentListingId}?user_id=${DEMO_USER_ID}`, { method: 'DELETE' });
+                if (res.ok) {
+                    isCurrentlySaved = false;
+                    btn.classList.remove('is-saved');
+                    btn.textContent = '🤍';
+                    btn.title = 'Kaydet';
+                    showToast('İlan kaydedilenlerden çıkarıldı', 'info');
+                }
+            } else {
+                const res = await fetch('/api/saved', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ listing_id: currentListingId, user_id: DEMO_USER_ID }),
+                });
+                if (res.ok) {
+                    isCurrentlySaved = true;
+                    btn.classList.add('is-saved');
+                    btn.textContent = '❤️';
+                    btn.title = 'Kaydedildi';
+                    showToast('İlan kaydedildi', 'success');
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to toggle save status', err);
+        } finally {
+            btn.disabled = false;
         }
     }
 

@@ -21,6 +21,7 @@ def read_listings(
     max_rooms: int | None = Query(default=None, ge=0),
     min_area: float | None = Query(default=None, ge=0),
     sort_by: str = Query(default="recent"),
+    search: str | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     if page < 1:
@@ -29,6 +30,16 @@ def read_listings(
         page_size = 10
 
     query = db.query(Listing).filter(Listing.is_active.is_(True))
+
+    if search:
+        search_term = f"%{search.lower()}%"
+        query = query.filter(
+            (Listing.title.ilike(search_term)) |
+            (Listing.description.ilike(search_term)) |
+            (Listing.city.ilike(search_term)) |
+            (Listing.district.ilike(search_term)) |
+            (Listing.neighborhood.ilike(search_term))
+        )
 
     if district:
         query = query.filter(Listing.district_canonical == district.lower())
