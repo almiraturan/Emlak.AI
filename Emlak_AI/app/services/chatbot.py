@@ -1,0 +1,495 @@
+"""Rule-based real-estate chatbot: parses Turkish user messages into listing
+filters and produces a short natural-language explanation of the top picks.
+
+LLM enhancement (Mistral via Ollama) is attempted opportunistically but the
+service degrades gracefully to template-based replies when Ollama is offline."""
+import logging
+import re
+from dataclasses import dataclass, field
+from typing import Optional
+
+from sqlalchemy import asc, desc
+from sqlalchemy.orm import Session
+
+from app.agents.base import BaseAgent
+from app.models.listing import Listing
+
+logger = logging.getLogger(__name__)
+
+KNOWN_DISTRICTS = [
+    # İstanbul Avrupa
+    "besiktas", "sisli", "beyoglu", "fatih", "eyup", "kagithane",
+    "bakirkoy", "bahcelievler", "gungoren", "bagcilar", "esenler",
+    "zeytinburnu", "avcilar", "buyukcekmece", "catalca", "silivri",
+    "beylikduzu", "esenyurt", "basaksehir", "arnavutkoy",
+    "gaziosmanpasa", "sultangazi", "bayrampasa",
+    # İstanbul Anadolu
+    "kadikoy", "uskudar", "atasehir", "maltepe", "kartal", "pendik",
+    "tuzla", "sancaktepe", "sultanbeyli", "cekmekoy", "umraniye",
+    "beykoz", "adalar", "sariyer",
+    # Ankara
+    "cankaya", "kecioren", "mamak", "yenimahalle", "etimesgut",
+    "sincan", "altindag", "pursaklar", "golbasi", "cankiri",
+    # İzmir
+    "karsiyaka", "bornova", "buca", "konak", "cigli", "bayrakli",
+    "gaziemir", "kemeralti",
+]
+
+_QUIET_WORDS = ("sessiz", "sakin", "huzurlu", "rahat", "gomultu", "tenha", "kalabalik degil")
+_CENTRAL_WORDS = ("merkez", "merkezi", "sehir merkezi", "istanbulun icinde", "sehrin ortasi")
+_LUXURY_WORDS = ("luks", "premium", "pahali", "villa", "rezidans", "ozel proje", "butik proje")
+_BUDGET_WORDS = ("ucuz", "uygun fiyat", "ekonomik", "az para", "butce", "hesapli")
+_INVEST_WORDS = ("yatirim", "yatirimlik", "kira getirisi", "deger kazanir", "kiralik potansiyel")
+_PET_WORDS = ("kopek", "kedi", "evcil hayvan", "hayvan")
+_STUDENT_WORDS = ("ogrenci", "universite", "universitesi", "ders", "kampus")
+_REMOTE_WORDS = ("evden calis", "uzaktan calis", "home office", "calisma odasi", "calismak icin")
+_NATURE_WORDS = ("orman", "yesil alan", "doga", "agac", "nehir", "koy", "bahceli semt")
+_NIGHTLIFE_WORDS = ("gece hayati", "bar", "eglence mekan", "kafe cok", "alisveris merkez")
+_FAMILY_WORDS = ("aile", "cocuklu", "genis aile", "buyuk aile", "ebeveyn")
+_ELDERLY_WORDS = ("yasli", "emekli", "nine", "dede", "buyukanne", "buyukbaba")
+_TRANSPORT_WORDS = ("metro", "metrobus", "otobus", "tramvay", "ulasim", "toplu tasima", "durak", "istasyon", "raylı sistem")
+_NEWLYWED_WORDS = ("yeni evli", "yeni evlendik", "nisanliyiz", "nisanlandi", "evleniyoruz", "evliyoruz", "cift olarak", "iki kisilik yasam")
+
+# Turkish number words → int (Turkish only)
+_TR_NUMS: dict[str, int] = {
+    "bir": 1, "iki": 2, "uc": 3, "dort": 4, "bes": 5,
+    "alti": 6, "yedi": 7, "sekiz": 8, "dokuz": 9,
+}
+_NUM_PAT = r"(\d+|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz)"
+
+
+def _parse_num(s: str) -> Optional[int]:
+    s = _strip(s).strip()
+    if s.isdigit():
+        return int(s)
+    return _TR_NUMS.get(s)
+
+
+@dataclass
+class ChatFilters:
+    district: Optional[str] = None
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    min_rooms: Optional[int] = None
+    max_rooms: Optional[int] = None
+    min_area: Optional[float] = None
+    max_area: Optional[float] = None
+    min_lifestyle: Optional[float] = None
+    max_building_age: Optional[int] = None
+    sort_by: str = "lifestyle_score"
+    keywords: list[str] = field(default_factory=list)
+    context: str = ""
+
+    def to_dict(self) -> dict:
+        d = {k: v for k, v in self.__dict__.items() if v not in (None, [], "")}
+        return d
+
+
+def _strip(text: str) -> str:
+    return text.lower().replace("ı", "i").replace("ğ", "g").replace("ş", "s") \
+        .replace("ç", "c").replace("ö", "o").replace("ü", "u").replace("İ", "i")
+
+
+def _parse_price_token(num_text: str, unit: str) -> Optional[float]:
+    try:
+        value = float(num_text.replace(".", "").replace(",", "."))
+    except ValueError:
+        return None
+    unit = unit.lower()
+    if unit.startswith("m"):
+        value *= 1_000_000
+    elif unit.startswith("b") or unit == "k":
+        value *= 1_000
+    return value
+
+
+def parse_message(message: str) -> ChatFilters:
+    f = ChatFilters()
+    text = _strip(message)
+
+    # --- District ---
+    for d in KNOWN_DISTRICTS:
+        if d in text:
+            f.district = d
+            f.keywords.append(d.title())
+            break
+
+    # --- Room layout: "3+1", "2 oda", "iki tane oda" ---
+    layout = re.search(r"(\d)\s*\+\s*(\d)", text)
+    if layout:
+        rooms = int(layout.group(1)) + int(layout.group(2))
+        f.min_rooms = rooms
+        f.max_rooms = rooms
+        f.keywords.append(f"{layout.group(1)}+{layout.group(2)}")
+    else:
+        oda = re.search(_NUM_PAT + r"\s*(?:tane\s*)?oda", text)
+        if oda:
+            n = _parse_num(oda.group(1)) or int(oda.group(1)) if oda.group(1).isdigit() else 1
+            f.min_rooms = n
+            f.max_rooms = n + 1
+            f.keywords.append(f"{n} oda")
+
+    # --- Price ceiling: "en fazla 5 milyon", "bütçem 3 milyon", "X TL'yi geçmesin" ---
+    cap = re.search(
+        r"(?:en fazla|altinda|kadar|gecmesin|butcem|butcemiz|paramiz|param|max)\s*"
+        r"(\d+(?:[.,]\d+)?)\s*(milyon|m|bin|b|tl|k)?",
+        text,
+    )
+    if not cap:
+        cap = re.search(
+            r"(\d+(?:[.,]\d+)?)\s*(milyon|m|bin|b|tl|k)\s*(?:altinda|kadar|gecmesin|max)",
+            text,
+        )
+    if cap:
+        unit = cap.group(2) or "milyon"
+        v = _parse_price_token(cap.group(1), unit)
+        if v:
+            f.max_price = v
+
+    # --- Price floor ---
+    floor = re.search(
+        r"(?:en az|uzeri|ustu|baslayan)\s*"
+        r"(\d+(?:[.,]\d+)?)\s*(milyon|m|bin|b|tl|k)?",
+        text,
+    )
+    if floor:
+        unit = floor.group(2) or "milyon"
+        v = _parse_price_token(floor.group(1), unit)
+        if v:
+            f.min_price = v
+
+    # --- Area: "120 m2", "150 metrekare" ---
+    area = re.search(r"(\d{2,4})\s*(?:m2|m²|metre|metrekare)", text)
+    if area:
+        f.min_area = float(area.group(1))
+        f.keywords.append(f"{int(area.group(1))} m²")
+
+    # --- Explicit min rooms: "en az 3 oda", "minimum 2 oda" ---
+    if f.min_rooms is None:
+        min_room_m = re.search(r"(?:en az|minimum|min)\s*" + _NUM_PAT + r"\s*(?:tane\s*)?oda", text)
+        if min_room_m:
+            n = _parse_num(min_room_m.group(1)) or 1
+            f.min_rooms = n
+            f.keywords.append(f"en az {n} oda")
+
+    # --- Studio / 1+0 ---
+    if re.search(r"(?:studyo|studio|1\s*\+\s*0)", text):
+        f.min_rooms = 1
+        f.max_rooms = 2
+        if "stüdyo" not in f.keywords:
+            f.keywords.append("stüdyo")
+        if not f.context:
+            f.context = "studio"
+
+    # --- Building age: "yeni bina", "sıfır bina", "depreme dayanıklı" ---
+    if re.search(r"(?:yeni bina|sifir bina|sifir daire|az yasinda|depreme dayanikli|yeni yapili)", text):
+        f.max_building_age = 10
+        if "yeni bina" not in f.keywords:
+            f.keywords.append("yeni bina")
+
+    # --- Spacious preference: "geniş ev", "büyük daire", "ferah" ---
+    if re.search(r"(?:buyuk|genis|ferah)\s*(?:ev|daire|alan|oda|mekan)?", text):
+        if f.min_area is None:
+            f.min_area = 100
+        if "geniş" not in f.keywords:
+            f.keywords.append("geniş")
+
+    # --- Pets ---
+    if any(w in text for w in _PET_WORDS):
+        f.keywords.append("evcil hayvan dostu")
+        f.min_lifestyle = 6.5
+        f.context = "pets"
+
+    # --- Student ---
+    if any(w in text for w in _STUDENT_WORDS):
+        f.keywords.append("öğrenciye uygun")
+        if f.max_price is None:
+            f.max_price = 2_500_000
+        f.min_lifestyle = 7.0
+        f.context = "student"
+
+    # --- Newly married / young couple ---
+    if any(w in text for w in _NEWLYWED_WORDS):
+        if f.min_rooms is None:
+            f.min_rooms = 2
+        if not f.context:
+            f.keywords.append("çifte uygun")
+            f.context = "newlywed"
+
+    # --- Children (number-aware) ---
+    # "3 çocuğum", "iki tane çocuk", "birkaç çocuk", "çocuklarım var"
+    n_kids = None
+    child_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:cocuk|kiz|oglan|bebek|torun|cocugum|cocuklarim)", text)
+    if child_m:
+        n_kids = _parse_num(child_m.group(1)) or 1
+    elif re.search(r"birka[c]\s*(?:tane\s*)?(?:cocuk|kiz|torun)", text):
+        n_kids = 2
+    elif re.search(r"(?:cocugum|cocuklarim|kucuk cocuklar?)\s*var", text):
+        n_kids = 1
+
+    if n_kids is not None:
+        if f.min_rooms is None or f.min_rooms < n_kids:
+            f.min_rooms = n_kids
+        f.min_lifestyle = max(f.min_lifestyle or 0, 7.5)
+        if "okul yakını" not in f.keywords:
+            f.keywords.extend(["okul yakını", f"{n_kids} çocuklu"])
+        f.context = "family_kids"
+    elif any(w in text for w in _FAMILY_WORDS):
+        f.keywords.append("aileye uygun")
+        if f.min_rooms is None:
+            f.min_rooms = 3
+        f.min_lifestyle = 7.5
+        f.context = "family"
+
+    # --- Household size: "4 kişilik aile", "5 kişi" ---
+    household_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:kisilik|kisili|kisi)\s*(?:aile|ev|hane)?", text)
+    if household_m and n_kids is None:
+        n_people = _parse_num(household_m.group(1)) or 2
+        implied_rooms = max(n_people - 1, 2)
+        if f.min_rooms is None or f.min_rooms < implied_rooms:
+            f.min_rooms = implied_rooms
+        if not f.context:
+            f.keywords.append(f"{n_people} kişilik aile")
+            f.context = "family"
+
+    # --- Elderly care (number-aware) ---
+    # "2 yaşlı", "annem babam için", "büyükannem var"
+    elderly_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:yasli|emekli|buyukanne|buyukbaba|nine|dede)", text)
+    has_elderly_rel = bool(re.search(
+        r"(?:annem|babam|annemin|babamin|anne.*baba|baba.*anne|buyukanne|buyukbaba|nine|dedem)",
+        text,
+    ))
+    if elderly_m or has_elderly_rel:
+        n_elderly = _parse_num((elderly_m.group(1) if elderly_m else None) or "2") or 2
+        implied_rooms = max(n_elderly + 1, 2)
+        if f.min_rooms is None or f.min_rooms < implied_rooms:
+            f.min_rooms = implied_rooms
+        f.min_lifestyle = max(f.min_lifestyle or 0, 7.0)
+        for kw in ("hastane yakını", "asansörlü"):
+            if kw not in f.keywords:
+                f.keywords.append(kw)
+        f.context = "elderly_care"
+    elif any(w in text for w in _ELDERLY_WORDS):
+        f.keywords.append("yaşlı dostu")
+        if f.min_rooms is None:
+            f.min_rooms = 2
+        f.min_lifestyle = 6.0
+        f.context = "elderly"
+
+    # --- Remote work ---
+    if any(w in text for w in _REMOTE_WORDS):
+        if "evden çalışma" not in f.keywords:
+            f.keywords.append("evden çalışma")
+        f.min_lifestyle = max(f.min_lifestyle or 0, 6.0)
+        if not f.context:
+            f.context = "remote"
+
+    # --- Nature / green areas ---
+    if any(w in text for w in _NATURE_WORDS):
+        if "doğal" not in f.keywords:
+            f.keywords.append("doğal")
+        f.min_lifestyle = max(f.min_lifestyle or 0, 7.5)
+        if not f.context:
+            f.context = "nature"
+
+    # --- Nightlife / social ---
+    if any(w in text for w in _NIGHTLIFE_WORDS):
+        if "aktif sosyal" not in f.keywords:
+            f.keywords.append("aktif sosyal")
+        if not f.context:
+            f.context = "nightlife"
+
+    # --- Transport proximity ---
+    if any(w in text for w in _TRANSPORT_WORDS):
+        if "toplu taşıma yakını" not in f.keywords:
+            f.keywords.append("toplu taşıma yakını")
+
+    # --- Building features: balkon, bahçe, asansör, garaj, güvenlik, manzara ---
+    _feature_map = {
+        "asansor": "asansörlü", "balkon": "balkonlu", "bahceli ev": "bahçeli",
+        "garaj": "garajlı", "guvenlik": "güvenlikli", "kapici": "güvenlikli",
+        "yeni bina": "yeni bina", "sifir bina": "sıfır bina",
+        "deniz manzara": "deniz manzaralı", "bogaz manzara": "boğaz manzaralı",
+    }
+    for key, label in _feature_map.items():
+        if key in text and label not in f.keywords:
+            f.keywords.append(label)
+
+    # --- Price tier ---
+    if any(w in text for w in _LUXURY_WORDS):
+        if "lüks" not in f.keywords:
+            f.keywords.append("lüks")
+        if f.min_price is None:
+            f.min_price = 5_000_000
+        f.sort_by = "price_desc"
+    if any(w in text for w in _BUDGET_WORDS):
+        if "uygun fiyat" not in f.keywords:
+            f.keywords.append("uygun fiyat")
+        if f.max_price is None:
+            f.max_price = 4_000_000
+        f.sort_by = "price_asc"
+
+    # --- Ambiance & sorting ---
+    if any(w in text for w in _QUIET_WORDS):
+        if "sakin" not in f.keywords:
+            f.keywords.append("sakin")
+        f.min_lifestyle = max(f.min_lifestyle or 0, 7.0)
+    if any(w in text for w in _CENTRAL_WORDS):
+        if "merkez" not in f.keywords:
+            f.keywords.append("merkez")
+        f.sort_by = "lifestyle_score"
+    if any(w in text for w in _INVEST_WORDS):
+        if "yatırımlık" not in f.keywords:
+            f.keywords.append("yatırımlık")
+        f.sort_by = "price_asc"
+        if f.max_price is None:
+            f.max_price = 3_500_000
+
+    return f
+
+
+def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Listing]:
+    q = db.query(Listing).filter(Listing.is_active.is_(True))
+
+    if filters.district:
+        q = q.filter(Listing.district_canonical == filters.district)
+    if filters.min_price is not None:
+        q = q.filter(Listing.price >= filters.min_price)
+    if filters.max_price is not None:
+        q = q.filter(Listing.price <= filters.max_price)
+    if filters.min_rooms is not None:
+        q = q.filter(Listing.room_count_total >= filters.min_rooms)
+    if filters.max_rooms is not None:
+        q = q.filter(Listing.room_count_total <= filters.max_rooms)
+    if filters.min_area is not None:
+        q = q.filter(Listing.area_m2 >= filters.min_area)
+    if filters.max_area is not None:
+        q = q.filter(Listing.area_m2 <= filters.max_area)
+    if filters.min_lifestyle is not None:
+        q = q.filter(Listing.lifestyle_score >= filters.min_lifestyle)
+    if filters.max_building_age is not None:
+        q = q.filter(Listing.building_age <= filters.max_building_age)
+
+    if filters.sort_by == "price_asc":
+        q = q.order_by(asc(Listing.price))
+    elif filters.sort_by == "price_desc":
+        q = q.order_by(desc(Listing.price))
+    else:
+        q = q.order_by(desc(Listing.lifestyle_score), asc(Listing.price))
+
+    return q.limit(limit).all()
+
+
+def _format_price(price) -> str:
+    return f"₺{int(price):,}".replace(",", ".")
+
+
+def _contextual_explanation(context: str, picks: list[Listing]) -> str:
+    if not picks:
+        return ""
+    best = picks[0]
+    if context == "pets":
+        return f"\n\n🐕 **Köpek/Kedi için ideal**: {best.title} yaşam puanı {best.lifestyle_score or 0:.1f}/10 ile bahçe ve çevre dostu. Parklar ve yeşil alanlar yakın!"
+    elif context == "family":
+        return f"\n\n👨-👩-👧-👦 **Aileniz için**: {best.title} {best.room_count_total} oda, {best.area_m2:.0f} m² ile geniş. Okullar ve oyun alanları yakın."
+    elif context == "student":
+        return f"\n\n🎓 **Öğrenciye uygun**: {best.title} uygun fiyat ve merkezi konum. Sosyal yaşam puanı {best.lifestyle_score or 0:.1f}/10."
+    elif context == "elderly":
+        return f"\n\n👴 **Yaşlılar için**: {best.title} erişilebilir konumda, sağlık hizmetleri yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+    elif context == "family_kids":
+        return f"\n\n👨‍👩‍👧‍👦 **Çocuklu aile için**: {best.title} geniş {best.room_count_total} oda, okul ve oyun alanlarına yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+    elif context == "elderly_care":
+        return f"\n\n👴 **Yaşlı bakımı için**: {best.title} asansörlü, hastane ve sağlık merkezi yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+    elif context == "remote":
+        return f"\n\n💻 **Evden çalışma için**: {best.title} sessiz çevrede. İnternet ve ışık avantajlı."
+    elif context == "nature":
+        return f"\n\n🌳 **Doğaya yakın**: {best.title} yeşil alanlar ve parklar başında (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+    elif context == "nightlife":
+        return f"\n\n🎉 **Sosyal ve aktif**: {best.title} kafe, bar ve restoranlar yakın. Eğlence merkezinde!"
+    elif context == "newlywed":
+        return f"\n\n💑 **Yeni çiftler için**: {best.title} modern ve merkezi, {best.room_count_total} oda (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+    elif context == "transport":
+        return f"\n\n🚇 **Ulaşım odaklı**: {best.title} metro ve toplu taşıma hatlarına yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+    elif context == "studio":
+        return f"\n\n🏠 **Stüdyo/küçük daire**: {best.title} pratik ve ekonomik, {best.area_m2:.0f} m² (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+    return ""
+
+
+_GREETING_PAT = re.compile(
+    r"^(merhaba|selam|hey|iyi gunler|iyi aksam|nasilsin|nasilsiniz|naber|ne haber|nasil yardimci)\b"
+)
+
+
+def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total: int) -> str:
+    if _GREETING_PAT.match(_strip(message)):
+        return (
+            "Merhaba! 👋 Ben EmlakAI chatbot'uyum, size ideal evi bulmak için buradayım.\n\n"
+            "Şunları anlayabilirim:\n"
+            "• Konum: *Kadıköy'de*, *Beşiktaş yakını*\n"
+            "• Oda: *3+1*, *en az 2 oda*, *stüdyo*\n"
+            "• Bütçe: *5 milyon altı*, *bütçem 3 milyon*\n"
+            "• Aile: *2 çocuğum var*, *4 kişilik aile*, *annem için*\n"
+            "• Özellik: *metro yakını*, *yeni bina*, *bahçeli*, *asansörlü*\n\n"
+            "Ne arıyorsunuz?"
+        )
+
+    if not picks:
+        bits = []
+        if filters.district:
+            bits.append(filters.district.title())
+        if filters.max_price:
+            bits.append(f"{_format_price(filters.max_price)} altında")
+        if filters.min_rooms:
+            bits.append(f"{filters.min_rooms}+ oda")
+        criteria = ", ".join(bits) if bits else "verdiğin kriterler"
+        return f"Üzgünüm, {criteria} için uygun ilan bulamadım. Bütçe veya tercihini esnetir misin?"
+
+    llm_reply = _llm_explain(message, filters, picks, total)
+    if llm_reply:
+        return llm_reply
+
+    intro_bits = []
+    if filters.keywords:
+        intro_bits.append(", ".join(filters.keywords))
+    if filters.max_price and filters.min_price:
+        intro_bits.append(f"{_format_price(filters.min_price)} - {_format_price(filters.max_price)}")
+    elif filters.max_price:
+        intro_bits.append(f"max {_format_price(filters.max_price)}")
+    elif filters.min_price:
+        intro_bits.append(f"min {_format_price(filters.min_price)}")
+    intro = " · ".join(intro_bits) if intro_bits else "tercihlerin"
+
+    lines = [f"Harika! {intro} için {total} ilan buldum. İlk {len(picks)} tavsiye:"]
+    for i, l in enumerate(picks, 1):
+        score = l.lifestyle_score or 0
+        verdict = {"underpriced": "ucuz", "fair": "adil", "overpriced": "pahalı"}.get(
+            (l.price_verdict or "fair"), "adil"
+        )
+        lines.append(
+            f"{i}. **{l.title}** — {_format_price(l.price)} · {l.area_m2:.0f} m² · "
+            f"{l.room_count_total} oda · ✨ {score:.1f}/10 · fiyat {verdict}"
+        )
+
+    lines.append(_contextual_explanation(filters.context, picks))
+    return "\n".join(lines)
+
+
+def _llm_explain(message: str, filters: ChatFilters, picks: list[Listing], total: int) -> Optional[str]:
+    agent = BaseAgent()
+    if not agent.is_ollama_available():
+        return None
+    listings_text = "\n".join(
+        f"- {l.title}: {int(l.price)} TRY, {l.area_m2:.0f} m², {l.room_count_total} oda, {l.district}, yaşam {l.lifestyle_score or 0:.1f}/10"
+        for l in picks
+    )
+    prompt = (
+        "Sen bir Türk emlak danışmanısın. Kullanıcı isteği ve eşleşen ilanlar veriliyor. "
+        "Kısa (3-5 cümle), Türkçe, samimi bir cevap üret. Neden seçtiğini açıkla.\n\n"
+        f"İstek: {message}\n\n"
+        f"Öneriler ({total} toplam):\n{listings_text}\n\nCevap:"
+    )
+    try:
+        return agent.call_llm(prompt)
+    except Exception as e:
+        logger.debug(f"LLM explain failed: {e}")
+        return None

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - EmlakAI{% endblock %}
+
+{% block content %}
+<div class="dashboard-page">
+
+    <!-- Hero Section -->
+    <section class="hero-v2">
+        <div class="hero-v2-inner">
+            <span class="hero-eyebrow">AI Odaklı Gayrimenkul</span>
+            <h1 class="hero-main-title">Hayalinizdeki Evi<br>AI ile Bulun</h1>
+            <p class="hero-subtitle">Türkiye'nin en akıllı emlak arama platformu — fiyat analizi, yaşam kalitesi skoru ve kişisel öneriler.</p>
+
+            <div class="hero-search-wrap">
+                <div class="hero-search-bar">
+                    <span class="hero-search-icon">📍</span>
+                    <input type="text" id="heroSearch" class="hero-search-input" placeholder="Şehir, ilçe ya da mahalle ara...">
+                    <button class="hero-search-btn" onclick="handleHeroSearch()">Ara</button>
+                </div>
+                <div class="hero-chips">
+                    <button class="hero-chip" onclick="setHeroSearch('Kadıköy')">Kadıköy</button>
+                    <button class="hero-chip" onclick="setHeroSearch('Beşiktaş')">Beşiktaş</button>
+                    <button class="hero-chip" onclick="setHeroSearch('3+1')">3+1</button>
+                    <button class="hero-chip" onclick="setHeroSearch('İstanbul')">İstanbul</button>
+                    <button class="hero-chip" onclick="setHeroSearch('Ataşehir')">Ataşehir</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Features Section -->
+    <section class="features-section">
+        <h2 class="features-title">AI Özellikleri</h2>
+        <div class="feature-cards">
+
+            <div class="feature-card glass">
+                <div class="feature-icon fi-price">📊</div>
+                <h3 class="feature-name">Fiyat Analizi</h3>
+                <p class="feature-desc">XGBoost ile değer tahmini. Overpriced / fair / underpriced verir.</p>
+            </div>
+
+            <div class="feature-card glass">
+                <div class="feature-icon fi-lifestyle">🌿</div>
+                <h3 class="feature-name">Yaşam Skoru</h3>
+                <p class="feature-desc">Çevredeki okul, hastane, metro ve park verisiyle 1–10 skor.</p>
+            </div>
+
+            <div class="feature-card glass">
+                <div class="feature-icon fi-rec">✨</div>
+                <h3 class="feature-name">Akıllı Öneri</h3>
+                <p class="feature-desc">Davranışınıza göre SVD ile kişiselleştirilmiş ilan önerileri.</p>
+            </div>
+
+        </div>
+    </section>
+
+    <!-- CTA Buttons -->
+    <section class="cta-section">
+        <div class="cta-row">
+            <a href="/listings" class="btn-cta btn-cta-green">🏠 Tüm İlanları Gör</a>
+            <a href="#" class="btn-cta btn-cta-purple" id="chatCta">💬 AI ile Sohbet Et</a>
+            <a href="/analyze" class="btn-cta btn-cta-amber">✨ AI Analizi Başlat</a>
+        </div>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function handleHeroSearch() {
+        const q = document.getElementById('heroSearch').value.trim();
+        if (q) window.location.href = '/listings?search=' + encodeURIComponent(q);
+        else window.location.href = '/listings';
+    }
+
+    function setHeroSearch(val) {
+        document.getElementById('heroSearch').value = val;
+        handleHeroSearch();
+    }
+
+    document.getElementById('heroSearch').addEventListener('keydown', e => {
+        if (e.key === 'Enter') handleHeroSearch();
+    });
+
+    document.getElementById('chatCta').addEventListener('click', e => {
+        e.preventDefault();
+        if (typeof openChat === 'function') openChat();
+        else window.location.href = '/listings';
+    });
+
+    // Navbar status
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const r = await fetch('/api/agents/profile/1');
+            updateStatusIndicator('backendStatus', r.ok);
+        } catch { updateStatusIndicator('backendStatus', false); }
+
+        try {
+            const r = await fetch('http://localhost:11434/api/tags');
+            updateStatusIndicator('ollamaStatus', r.ok);
+        } catch { updateStatusIndicator('ollamaStatus', false); }
+
+        setInterval(async () => {
+            try { updateStatusIndicator('backendStatus', (await fetch('/api/agents/profile/1')).ok); } catch { updateStatusIndicator('backendStatus', false); }
+            try { updateStatusIndicator('ollamaStatus', (await fetch('http://localhost:11434/api/tags')).ok); } catch { updateStatusIndicator('ollamaStatus', false); }
+        }, 5000);
+    });
+
+    function updateStatusIndicator(id, active) {
+        const dot = document.getElementById(id)?.querySelector('.status-dot');
+        if (!dot) return;
+        dot.classList.toggle('active', active);
+    }
+</script>
+{% endblock %}

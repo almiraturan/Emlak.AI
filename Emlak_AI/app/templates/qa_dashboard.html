@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>EmlakAI Data QA</title>
+  <style>
+    :root {
+      --bg: #f2f4ef;
+      --card: #fefcf8;
+      --ink: #20272b;
+      --muted: #5e6a72;
+      --line: #d5ddd7;
+      --good: #1f7a4f;
+      --warn: #9a5d00;
+      --bad: #a31f1f;
+      --accent: #0b6bcb;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", "Trebuchet MS", "Lucida Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1000px 350px at 10% -15%, #d7f0ff 0%, transparent 60%),
+        radial-gradient(900px 300px at 100% 0%, #efe2bf 0%, transparent 62%),
+        var(--bg);
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.4rem, 2vw, 2rem);
+      letter-spacing: 0.2px;
+    }
+
+    .sub {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 0.95rem;
+    }
+
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+    }
+
+    .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 8px 22px rgba(38, 58, 50, 0.05);
+    }
+
+    .kpi {
+      grid-column: span 3;
+    }
+
+    .kpi .label {
+      color: var(--muted);
+      font-size: 0.84rem;
+      margin-bottom: 8px;
+    }
+
+    .kpi .value {
+      font-size: clamp(1.15rem, 2vw, 1.7rem);
+      font-weight: 700;
+    }
+
+    .panel {
+      grid-column: span 6;
+      min-height: 280px;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 1.02rem;
+    }
+
+    .muted {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .chip {
+      display: inline-block;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      border: 1px solid var(--line);
+      margin-right: 6px;
+      margin-bottom: 6px;
+      background: #fff;
+    }
+
+    .chip.ok { border-color: #b8dbc7; color: var(--good); background: #eff9f2; }
+    .chip.warn { border-color: #f1d4a8; color: var(--warn); background: #fff6e9; }
+    .chip.bad { border-color: #e7bbbb; color: var(--bad); background: #fff0f0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 8px 6px;
+      border-bottom: 1px solid #eceeea;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 0.82rem;
+      letter-spacing: 0.2px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: 360px;
+    }
+
+    .status {
+      font-size: 0.78rem;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid var(--line);
+      white-space: nowrap;
+    }
+
+    .status.inserted, .status.updated, .status.skipped { color: var(--good); background: #f0faf4; border-color: #c9e6d3; }
+    .status.invalid, .status.deactivated { color: var(--warn); background: #fff7ec; border-color: #efd6af; }
+    .status.error { color: var(--bad); background: #fff0f0; border-color: #e7bfbf; }
+
+    .mono {
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.8rem;
+    }
+
+    .full {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 980px) {
+      .kpi { grid-column: span 6; }
+      .panel { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 620px) {
+      .kpi { grid-column: 1 / -1; }
+      .wrap { padding: 14px; }
+      .top { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="top">
+      <div>
+        <h1>EmlakAI Data QA Panel</h1>
+        <div class="sub">Ingestion dogrulama, veri sagligi ve son kayitlarin hizli kontrolu</div>
+      </div>
+      <button class="btn" id="refreshBtn">Yenile</button>
+    </div>
+
+    <section class="grid" id="kpiGrid"></section>
+
+    <section class="grid" style="margin-top: 10px;">
+      <article class="card panel">
+        <h2>Kaynak Dagilimi</h2>
+        <div id="sourceChips" class="muted">Yukleniyor...</div>
+      </article>
+      <article class="card panel">
+        <h2>Son 24 Saat Ingestion Durumlari</h2>
+        <div id="statusChips" class="muted">Yukleniyor...</div>
+      </article>
+      <article class="card panel full">
+        <h2>Son Ingestion Kayitlari</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Olusma</th>
+                <th>Durum</th>
+                <th>Kaynak</th>
+                <th>Source ID</th>
+                <th>Detay</th>
+              </tr>
+            </thead>
+            <tbody id="recordsBody"></tbody>
+          </table>
+        </div>
+      </article>
+      <article class="card panel full">
+        <h2>Ornek Ilanlar (Son Guncellenenler)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Baslik</th>
+                <th>Lokasyon</th>
+                <th>Fiyat</th>
+                <th>Kaynak</th>
+                <th>Aktif</th>
+                <th>Guncelleme</th>
+              </tr>
+            </thead>
+            <tbody id="listingBody"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    function esc(v) {
+      if (v === null || v === undefined) return "-";
+      return String(v)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function fmtDate(v) {
+      if (!v) return "-";
+      const d = new Date(v);
+      if (Number.isNaN(d.getTime())) return esc(v);
+      return d.toLocaleString("tr-TR");
+    }
+
+    function moneyTry(v) {
+      if (v === null || v === undefined) return "-";
+      const n = Number(v);
+      if (Number.isNaN(n)) return esc(v);
+      return new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 0 }).format(n);
+    }
+
+    function asChip(label, value, cssClass) {
+      return `<span class="chip ${cssClass || ""}">${esc(label)}: <strong>${esc(value)}</strong></span>`;
+    }
+
+    function statusClass(status) {
+      if (status === "error") return "bad";
+      if (status === "invalid" || status === "deactivated") return "warn";
+      return "ok";
+    }
+
+    function kpiCard(label, value) {
+      return `<article class="card kpi"><div class="label">${esc(label)}</div><div class="value">${esc(value)}</div></article>`;
+    }
+
+    async function fetchJson(url) {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status} - ${url}`);
+      return resp.json();
+    }
+
+    async function loadDashboard() {
+      const [summary, records, listings] = await Promise.all([
+        fetchJson("/qa/api/summary"),
+        fetchJson("/qa/api/ingestion-records?limit=40"),
+        fetchJson("/qa/api/listing-sample?limit=25"),
+      ]);
+
+      const kpiGrid = document.getElementById("kpiGrid");
+      kpiGrid.innerHTML = [
+        kpiCard("Toplam Ilan", summary.total_listings),
+        kpiCard("Aktif Ilan", summary.active_listings),
+        kpiCard("Pasif Ilan", summary.inactive_listings),
+        kpiCard("Tekrarlanan Kayit", summary.duplicate_source_records),
+        kpiCard("Geo Koordinatli", summary.with_geo),
+        kpiCard("Fiyati Bos", summary.missing_price),
+        kpiCard("24s Error", summary.ingestion_last_24h.error || 0),
+        kpiCard("24s Invalid", summary.ingestion_last_24h.invalid || 0),
+      ].join("");
+
+      const sourceChips = document.getElementById("sourceChips");
+      const src = Object.entries(summary.by_source || {});
+      sourceChips.innerHTML = src.length
+        ? src.map(([name, count]) => asChip(name, count, "ok")).join("")
+        : "Kaynak bilgisi bulunamadi";
+
+      const statusChips = document.getElementById("statusChips");
+      const st = Object.entries(summary.ingestion_last_24h || {});
+      statusChips.innerHTML = st.length
+        ? st.map(([name, count]) => asChip(name, count, statusClass(name))).join("")
+        : "Son 24 saatte ingestion kaydi yok";
+
+      const recordsBody = document.getElementById("recordsBody");
+      recordsBody.innerHTML = (records.items || []).map((r) => `
+        <tr>
+          <td>${fmtDate(r.created_at)}</td>
+          <td><span class="status ${esc(r.status)}">${esc(r.status)}</span></td>
+          <td>${esc(r.source)}</td>
+          <td class="mono">${esc(r.source_listing_id)}</td>
+          <td>${esc(r.detail)}</td>
+        </tr>
+      `).join("") || '<tr><td colspan="5" class="muted">Kayit bulunamadi</td></tr>';
+
+      const listingBody = document.getElementById("listingBody");
+      listingBody.innerHTML = (listings.items || []).map((l) => `
+        <tr>
+          <td>${esc(l.id)}</td>
+          <td>${esc(l.title)}</td>
+          <td>${esc(l.city)} / ${esc(l.district)} / ${esc(l.neighborhood)}</td>
+          <td>${moneyTry(l.price)} ${esc(l.currency || "")}</td>
+          <td>${esc(l.source)} (${esc(l.source_listing_id)})</td>
+          <td>${l.is_active ? "Evet" : "Hayir"}</td>
+          <td>${fmtDate(l.source_updated_at)}</td>
+        </tr>
+      `).join("") || '<tr><td colspan="7" class="muted">Ilan bulunamadi</td></tr>';
+    }
+
+    async function safeLoad() {
+      const btn = document.getElementById("refreshBtn");
+      btn.disabled = true;
+      btn.textContent = "Yenileniyor...";
+      try {
+        await loadDashboard();
+      } catch (err) {
+        const kpiGrid = document.getElementById("kpiGrid");
+        kpiGrid.innerHTML = `<article class="card full"><strong>Hata:</strong> ${esc(err.message || err)}</article>`;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Yenile";
+      }
+    }
+
+    document.getElementById("refreshBtn").addEventListener("click", safeLoad);
+    safeLoad();
+  </script>
+</body>
+</html>

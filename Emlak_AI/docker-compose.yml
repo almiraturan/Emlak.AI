@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: emlakai-postgres
+    environment:
+      POSTGRES_DB: emlakai
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d emlakai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: emlakai-redis
+    ports:
+      - "6379:6379"
+
+  ollama:
+    image: ollama/ollama
+    container_name: emlakai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+
+  backend:
+    build: .
+    container_name: emlakai-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_started
+
+  worker:
+    build: .
+    container_name: emlakai-worker
+    command: ["python", "-m", "dramatiq", "app.services.background", "--processes", "1", "--threads", "4"]
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ollama:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  ollama_data:

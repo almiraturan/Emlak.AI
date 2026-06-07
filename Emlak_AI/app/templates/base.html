@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}EmlakAI - AI-Powered Real Estate Intelligence{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=20260603-dashboard-v2">
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-logo">
+                <a href="/">
+                    <span class="logo-icon">🏠</span>
+                    <span class="logo-text">EmlakAI</span>
+                </a>
+            </div>
+            <ul class="navbar-menu">
+                <li><a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">Dashboard</a></li>
+                <li><a href="/analyze" class="nav-link {% if request.url.path == '/analyze' %}active{% endif %}">Analiz</a></li>
+                <li><a href="/listings" class="nav-link {% if request.url.path == '/listings' %}active{% endif %}">İlanlar</a></li>
+                <li><a href="/saved" class="nav-link {% if request.url.path == '/saved' %}active{% endif %}">Kaydedilen Evler</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-content">
+            <p>&copy; 2026 EmlakAI. AI-powered real estate intelligence platform.</p>
+            <div class="footer-links">
+                <a href="#">Privacy</a>
+                <a href="#">Terms</a>
+                <a href="#">Contact</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Toast Notifications -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- Scripts -->
+    <script src="{{ url_for('static', path='/js/main.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

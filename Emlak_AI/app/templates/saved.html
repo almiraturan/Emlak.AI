@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Kaydedilen Evler - EmlakAI{% endblock %}
+
+{% block content %}
+<div class="listings-page">
+    <section class="listings-header">
+        <h1>Kaydedilen Evler</h1>
+        <p>Beğendiğin ilanlar burada toplanır. Listeden çıkarmak için kart üzerindeki kalbi tıkla.</p>
+    </section>
+
+    <div id="savedGrid" class="listings-grid">
+        <div class="loading-spinner-container">
+            <div class="loading-spinner"></div>
+            <p>Yükleniyor...</p>
+        </div>
+    </div>
+
+    <div id="emptyState" class="no-results" style="display:none;">
+        <p>Henüz kaydedilmiş ev yok. <a href="/listings" style="color:#93c5fd;">İlanlara göz at</a> ve kalp simgesine bas.</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .listings-page { width: 100%; }
+    .listings-header { display: grid; gap: 1rem; margin-bottom: 1.5rem; }
+    .listings-header h1 { margin: 0; font-size: clamp(2rem, 4vw, 3.5rem); }
+    .listings-header p { margin: 0; color: rgba(255,255,255,0.72); }
+    .listings-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    .listing-card {
+        position: relative;
+        display: grid;
+        gap: 1rem;
+        border-radius: 24px;
+        padding: 1.25rem;
+        background: rgba(10, 15, 30, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
+        backdrop-filter: blur(18px);
+    }
+    .listing-title { margin: 0; font-size: 1.05rem; line-height: 1.35; }
+    .listing-price { font-size: 1.5rem; font-weight: 700; color: #fff; }
+    .meta-item { color: rgba(255,255,255,0.82); display:flex; gap:0.5rem; align-items:center; }
+    .listing-meta { display:flex; flex-direction:column; gap:0.5rem; }
+    .lifestyle-pill {
+        border-radius: 999px; padding: 0.35rem 0.75rem;
+        background: rgba(255,255,255,0.08); color:#fff; font-weight:600;
+    }
+    .listing-footer { display:flex; justify-content:flex-end; gap:0.5rem; }
+    .btn.btn-small {
+        border:0; border-radius:14px;
+        background: linear-gradient(135deg, #f8fafc, #cbd5e1);
+        color:#0f172a; padding:0.65rem 0.9rem; font-weight:700; cursor:pointer;
+    }
+    .unsave-btn {
+        position: absolute; top: 0.85rem; right: 0.85rem;
+        background: rgba(220, 38, 38, 0.18);
+        border: 1px solid rgba(248, 113, 113, 0.35);
+        color: #fecaca; border-radius: 999px;
+        padding: 0.35rem 0.7rem; cursor: pointer; font-size: 0.9rem;
+    }
+    .unsave-btn:hover { background: rgba(220, 38, 38, 0.32); }
+    .no-results {
+        border-radius: 20px; padding: 1rem 1.25rem;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+    }
+    .loading-spinner-container {
+        grid-column: 1 / -1; min-height: 220px;
+        display: grid; place-items: center; gap: 0.75rem;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const USER_ID = 1;
+
+    document.addEventListener('DOMContentLoaded', loadSaved);
+
+    async function loadSaved() {
+        const grid = document.getElementById('savedGrid');
+        const empty = document.getElementById('emptyState');
+        try {
+            const res = await fetch(`/api/saved?user_id=${USER_ID}`);
+            if (!res.ok) throw new Error('Yükleme başarısız');
+            const items = await res.json();
+            if (!items.length) {
+                grid.style.display = 'none';
+                empty.style.display = 'block';
+                return;
+            }
+            grid.style.display = 'grid';
+            empty.style.display = 'none';
+            grid.innerHTML = items.map(renderCard).join('');
+        } catch (err) {
+            grid.innerHTML = `<div class="no-results">Hata: ${err.message}</div>`;
+        }
+    }
+
+    function renderCard(l) {
+        const score = (typeof l.lifestyle_score === 'number') ? `${l.lifestyle_score.toFixed(1)}/10` : '-';
+        const price = Number(l.price || 0).toLocaleString('tr-TR');
+        return `
+            <article class="listing-card">
+                <button class="unsave-btn" type="button" title="Kaydedilenlerden çıkar"
+                        onclick="unsave(${l.id}, this)">❤️ Kaldır</button>
+                <h3 class="listing-title">${escapeHtml(l.title || 'Untitled')}</h3>
+                <div class="listing-price">₺${price}</div>
+                <div class="listing-meta">
+                    <div class="meta-item">📍 ${escapeHtml(l.district || 'Unknown')}</div>
+                    <div class="meta-item">📐 ${l.area_m2 || '-'} m²</div>
+                    <div class="meta-item">🏠 ${l.room_count_total || '-'} oda</div>
+                    <div class="meta-item">⭐ <span class="lifestyle-pill">${score}</span></div>
+                </div>
+                <div class="listing-footer">
+                    <button class="btn btn-small" type="button"
+                            onclick="window.location.href='/analyze?listing_id=${l.id}'">📊 Analiz Et</button>
+                </div>
+            </article>`;
+    }
+
+    async function unsave(listingId, btn) {
+        btn.disabled = true;
+        try {
+            await fetch(`/api/saved/${listingId}?user_id=${USER_ID}`, { method: 'DELETE' });
+            const card = btn.closest('.listing-card');
+            card.style.transition = 'opacity 0.25s';
+            card.style.opacity = '0';
+            setTimeout(loadSaved, 250);
+        } catch (err) {
+            btn.disabled = false;
+            alert('Çıkarılamadı: ' + err.message);
+        }
+    }
+
+    function escapeHtml(s) {
+        return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+</script>
+{% endblock %}

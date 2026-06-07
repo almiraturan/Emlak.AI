@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Engines - EmlakAI{% endblock %}
+
+{% block content %}
+<div class="engines-page">
+    <section class="engines-header">
+        <div class="engines-header-content">
+            <h1>Engine Test</h1>
+            <p>Her AI engine'i ayrı ayrı test et</p>
+        </div>
+        <button class="btn btn-primary" onclick="testAllEngines()">🧪 Tümünü Test Et</button>
+    </section>
+
+    <div class="engines-test-grid">
+        <!-- Profile Engine Test -->
+        <div class="engine-test-card glass engine-profile">
+            <div class="engine-test-header">
+                <h3>Profile Engine</h3>
+                <span class="engine-badge">ML</span>
+            </div>
+            <div class="engine-test-input">
+                <label for="profileUserId">User ID</label>
+                <input type="number" id="profileUserId" placeholder="1" min="1" value="1">
+            </div>
+            <button class="btn btn-secondary btn-small" onclick="testEngine('profile')">
+                <span>Test</span>
+            </button>
+            <div class="engine-test-result">
+                <div class="result-status" id="profileStatus"></div>
+                <div class="result-duration" id="profileDuration"></div>
+                <pre class="result-json" id="profileResult"></pre>
+            </div>
+        </div>
+
+        <!-- Lifestyle Engine Test -->
+        <div class="engine-test-card glass engine-lifestyle">
+            <div class="engine-test-header">
+                <h3>Lifestyle Engine</h3>
+                <span class="engine-badge">RAG</span>
+            </div>
+            <div class="engine-test-input">
+                <label for="lifestyleListingId">Listing ID</label>
+                <input type="number" id="lifestyleListingId" placeholder="1" min="1" value="1">
+            </div>
+            <button class="btn btn-secondary btn-small" onclick="testEngine('lifestyle')">
+                <span>Test</span>
+            </button>
+            <div class="engine-test-result">
+                <div class="result-status" id="lifestyleStatus"></div>
+                <div class="result-duration" id="lifestyleDuration"></div>
+                <pre class="result-json" id="lifestyleResult"></pre>
+            </div>
+        </div>
+
+        <!-- Price Engine Test -->
+        <div class="engine-test-card glass engine-price">
+            <div class="engine-test-header">
+                <h3>Price Engine</h3>
+                <span class="engine-badge">ML</span>
+            </div>
+            <div class="engine-test-input">
+                <label for="priceListingId">Listing ID</label>
+                <input type="number" id="priceListingId" placeholder="1" min="1" value="1">
+            </div>
+            <button class="btn btn-secondary btn-small" onclick="testEngine('price')">
+                <span>Test</span>
+            </button>
+            <div class="engine-test-result">
+                <div class="result-status" id="priceStatus"></div>
+                <div class="result-duration" id="priceDuration"></div>
+                <pre class="result-json" id="priceResult"></pre>
+            </div>
+        </div>
+
+        <!-- Comparison Engine Test -->
+        <div class="engine-test-card glass engine-comparison">
+            <div class="engine-test-header">
+                <h3>Comparison Engine</h3>
+                <span class="engine-badge">Hybrid</span>
+            </div>
+            <div class="engine-test-input">
+                <label for="comparisonListingIds">Listing IDs (virgülle ayır)</label>
+                <input type="text" id="comparisonListingIds" placeholder="1,2,3" value="1,2,3">
+                <label for="comparisonUserId">User ID</label>
+                <input type="number" id="comparisonUserId" placeholder="1" min="1" value="1">
+            </div>
+            <button class="btn btn-secondary btn-small" onclick="testEngine('comparison')">
+                <span>Test</span>
+            </button>
+            <div class="engine-test-result">
+                <div class="result-status" id="comparisonStatus"></div>
+                <div class="result-duration" id="comparisonDuration"></div>
+                <pre class="result-json" id="comparisonResult"></pre>
+            </div>
+        </div>
+
+        <!-- Recommendation Engine Test -->
+        <div class="engine-test-card glass engine-recommendation">
+            <div class="engine-test-header">
+                <h3>Recommendation Engine</h3>
+                <span class="engine-badge">ML</span>
+            </div>
+            <div class="engine-test-input">
+                <label for="recommendationUserId">User ID</label>
+                <input type="number" id="recommendationUserId" placeholder="1" min="1" value="1">
+            </div>
+            <button class="btn btn-secondary btn-small" onclick="testEngine('recommendation')">
+                <span>Test</span>
+            </button>
+            <div class="engine-test-result">
+                <div class="result-status" id="recommendationStatus"></div>
+                <div class="result-duration" id="recommendationDuration"></div>
+                <pre class="result-json" id="recommendationResult"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function testEngine(engineName) {
+        const startTime = performance.now();
+        let endpoint = '';
+        let userId, listingId, listingIds;
+
+        try {
+            switch(engineName) {
+                case 'profile':
+                    userId = parseInt(document.getElementById('profileUserId').value) || 1;
+                    endpoint = `/api/agents/profile/${userId}`;
+                    break;
+                case 'lifestyle':
+                    listingId = parseInt(document.getElementById('lifestyleListingId').value) || 1;
+                    endpoint = `/api/agents/listing/${listingId}/lifestyle`;
+                    break;
+                case 'price':
+                    listingId = parseInt(document.getElementById('priceListingId').value) || 1;
+                    endpoint = `/api/agents/listing/${listingId}/price-analysis`;
+                    break;
+                case 'comparison':
+                    const idsString = document.getElementById('comparisonListingIds').value;
+                    listingIds = idsString.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+                    userId = parseInt(document.getElementById('comparisonUserId').value) || 1;
+                    if (listingIds.length === 0) {
+                        showToast('Lütfen en az bir listing ID girin', 'error');
+                        return;
+                    }
+                    endpoint = `/api/agents/compare`;
+                    break;
+                case 'recommendation':
+                    userId = parseInt(document.getElementById('recommendationUserId').value) || 1;
+                    endpoint = `/api/agents/recommendations/${userId}`;
+                    break;
+            }
+
+            updateEngineStatus(engineName, 'loading', 'Test ediliyor...');
+
+            const options = {
+                method: engineName === 'comparison' ? 'POST' : 'GET'
+            };
+
+            if (engineName === 'comparison') {
+                options.headers = { 'Content-Type': 'application/json' };
+                options.body = JSON.stringify({ listing_ids: listingIds, user_id: userId });
+            }
+
+            const response = await fetch(endpoint, options);
+            const data = await response.json();
+            const duration = Math.round(performance.now() - startTime);
+
+            if (!response.ok) {
+                updateEngineStatus(engineName, 'error', `Hata: ${data.detail || 'Unknown error'}`);
+            } else {
+                updateEngineStatus(engineName, 'success', `Başarılı (${duration}ms)`);
+                displayEngineResult(engineName, data);
+            }
+
+            document.getElementById(`${engineName}Duration`).textContent = `${duration}ms`;
+
+        } catch (error) {
+            const duration = Math.round(performance.now() - startTime);
+            updateEngineStatus(engineName, 'error', `Hata: ${error.message}`);
+            document.getElementById(`${engineName}Duration`).textContent = `${duration}ms`;
+        }
+    }
+
+    function updateEngineStatus(engineName, status, message) {
+        const statusDiv = document.getElementById(`${engineName}Status`);
+        statusDiv.className = `result-status result-${status}`;
+        statusDiv.textContent = message;
+    }
+
+    function displayEngineResult(engineName, data) {
+        const resultDiv = document.getElementById(`${engineName}Result`);
+        const formattedJson = JSON.stringify(data, null, 2);
+        resultDiv.textContent = formattedJson;
+        highlightJson(resultDiv);
+    }
+
+    function highlightJson(element) {
+        // Simple JSON syntax highlighting
+        let text = element.textContent;
+        text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        
+        text = text.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+            (match) => {
+                let cls = 'number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'key';
+                    } else {
+                        cls = 'string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            }
+        );
+
+        element.innerHTML = text;
+    }
+
+    async function testAllEngines() {
+        const engines = ['profile', 'lifestyle', 'price', 'comparison', 'recommendation'];
+        
+        showToast('Tüm engine testleri başlatılıyor...', 'info');
+        
+        for (const engine of engines) {
+            await new Promise(resolve => {
+                setTimeout(() => {
+                    testEngine(engine);
+                    resolve();
+                }, 800);
+            });
+        }
+        
+        showToast('Tüm testler tamamlandı!', 'success');
+    }
+</script>
+{% endblock %}
