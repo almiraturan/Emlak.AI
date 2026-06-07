@@ -1,5 +1,7 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, or_
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -32,14 +34,27 @@ def read_listings(
     query = db.query(Listing).filter(Listing.is_active.is_(True))
 
     if search:
-        search_term = f"%{search.lower()}%"
-        query = query.filter(
-            (Listing.title.ilike(search_term)) |
-            (Listing.description.ilike(search_term)) |
-            (Listing.city.ilike(search_term)) |
-            (Listing.district.ilike(search_term)) |
-            (Listing.neighborhood.ilike(search_term))
-        )
+        s = search.strip()
+        # Detect Turkish room-count pattern: "4+1", "3+1", "2+1", etc.
+        # Only search in title to avoid false positives from descriptions.
+        room_match = re.match(r'^(\d+)\+(\d+)$', s)
+        if room_match:
+            # Exact room-type match in title only (e.g. "4+1")
+            query = query.filter(Listing.title.ilike(f"%{s}%"))
+        else:
+            # Location / project name search.
+            # Intentionally exclude `description` so that an Ankara listing
+            # mentioning "istanbul" in its description does NOT appear when
+            # the user searches for Istanbul.
+            term = f"%{s.lower()}%"
+            query = query.filter(
+                or_(
+                    Listing.title.ilike(term),
+                    Listing.city.ilike(term),
+                    Listing.district.ilike(term),
+                    Listing.neighborhood.ilike(term),
+                )
+            )
 
     if district:
         query = query.filter(Listing.district_canonical == district.lower())

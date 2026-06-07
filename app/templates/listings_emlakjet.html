@@ -11,9 +11,9 @@
             <input type="text" id="searchInput" placeholder="Arama..." class="search-input">
             <select id="sortSelect" class="sort-select">
                 <option value="recent">Son Eklenen</option>
-                <option value="price-asc">Fiyat (Düşük)</option>
-                <option value="price-desc">Fiyat (Yüksek)</option>
-                <option value="lifestyle">Lifestyle Skoru</option>
+                <option value="price_asc">Fiyat (Düşük)</option>
+                <option value="price_desc">Fiyat (Yüksek)</option>
+                <option value="lifestyle_score">Lifestyle Skoru</option>
             </select>
             <button id="syncEmlakjetButton" class="sync-button" type="button" onclick="syncEmlakjetListings()">EmlakJet’ten Çek</button>
         </div>
@@ -834,12 +834,25 @@
     let savedIds = new Set();
     let compareIds = new Set();
 
+    let searchDebounceTimer = null;
+
     document.addEventListener('DOMContentLoaded', async () => {
+        // Read ?search= from URL and pre-fill the search input
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlSearch = urlParams.get('search');
+        if (urlSearch) {
+            document.getElementById('searchInput').value = urlSearch;
+        }
+
         await loadSavedIds();
         await loadListings(1);
 
-        document.getElementById('searchInput').addEventListener('input', () => render());
-        document.getElementById('sortSelect').addEventListener('change', () => render());
+        // Server-side search: debounce and reload from API
+        document.getElementById('searchInput').addEventListener('input', () => {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => loadListings(1), 350);
+        });
+        document.getElementById('sortSelect').addEventListener('change', () => loadListings(1));
 
         initChat();
         initEmailModal();
@@ -899,6 +912,15 @@
 
     function buildListingsQuery(page) {
         const params = new URLSearchParams({ page, page_size: PAGE_SIZE });
+
+        // Include the search input value for server-side search
+        const searchTerm = document.getElementById('searchInput').value.trim();
+        if (searchTerm) params.set('search', searchTerm);
+
+        // Include sort
+        const sortBy = document.getElementById('sortSelect').value;
+        if (sortBy && sortBy !== 'recent') params.set('sort_by', sortBy);
+
         for (const [k, v] of Object.entries(activeChatFilters)) {
             if (v === null || v === undefined || v === '' || Array.isArray(v)) continue;
             if (k === 'sort_by') params.set('sort_by', v);
@@ -931,28 +953,8 @@
     }
 
     function render() {
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        const sortBy = document.getElementById('sortSelect').value;
-
-        let items = currentItems.filter(listing => {
-            const title = (listing.title || '').toLowerCase();
-            const district = (listing.district || '').toLowerCase();
-            return title.includes(searchTerm) || district.includes(searchTerm);
-        });
-
-        switch (sortBy) {
-            case 'price-asc':
-                items.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
-                break;
-            case 'price-desc':
-                items.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
-                break;
-            case 'lifestyle':
-                items.sort((a, b) => (b.lifestyle_score || 0) - (a.lifestyle_score || 0));
-                break;
-        }
-
-        displayListings(items);
+        // Server-side search+sort — just display what the API returned
+        displayListings(currentItems);
         renderPagination();
     }
 
