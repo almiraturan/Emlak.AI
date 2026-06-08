@@ -8,9 +8,12 @@ from app.agents.base import BaseAgent
 
 logger = logging.getLogger(__name__)
 
-# Overpass API endpoint
-OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter"
-OVERPASS_TIMEOUT = 10  # seconds
+# Overpass API endpoints (tried in order on failure/rate-limit)
+OVERPASS_ENDPOINTS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.openstreetmap.ru/api/interpreter",
+]
 OVERPASS_HEADERS = {
     "User-Agent": "EmlakAI/1.0 (contact: dev@localhost)",
     "Accept": "application/json",
@@ -27,29 +30,61 @@ POI_WEIGHTS = {
     "restaurant": 0.5,
 }
 
+# Radius within which POIs are counted normally (metres)
+CATEGORY_COUNT_RADIUS_M = {
+    "school": 1000,
+    "hospital": 3000,
+    "bus": 1000,
+    "subway": 1000,
+    "park": 1000,
+    "supermarket": 1000,
+    "restaurant": 1000,
+}
+
+# Wider search radius so we can always find the nearest POI (metres)
+CATEGORY_SEARCH_RADIUS_M = {
+    "school": 5000,
+    "hospital": 5000,
+    "bus": 5000,
+    "subway": 5000,
+    "park": 5000,
+    "supermarket": 2000,
+    "restaurant": 2000,
+}
+
 
 class LifestyleAgent(BaseAgent):
     """Lifestyle Scoring using RAG (Overpass API + Mistral LLM)."""
 
     def __init__(self):
-        """Initialize the agent."""
         super().__init__()
 
     # Maps OSM tags → our internal POI category
     _TAG_CATEGORY_MAP = [
-        (("amenity", "school"),      "school"),
-        (("amenity", "hospital"),    "hospital"),
-        (("highway", "bus_stop"),    "bus"),
+        (("amenity", "school"),          "school"),
+        (("amenity", "hospital"),        "hospital"),
+        (("highway", "bus_stop"),        "bus"),
         (("railway", "subway_entrance"), "subway"),
-        (("leisure", "park"),        "park"),
-        (("shop", "supermarket"),    "supermarket"),
-        (("amenity", "restaurant"),  "restaurant"),
+        (("leisure", "park"),            "park"),
+        (("shop", "supermarket"),        "supermarket"),
+        (("amenity", "restaurant"),      "restaurant"),
     ]
 
     def get_pois_nearby(
         self, latitude: float, longitude: float, radius_m: int = 1000
     ) -> tuple[Dict[str, int], Dict[str, float | None], Dict[str, list[str]]]:
-        """Fetch POIs with a single batched Overpass query (avoids per-type rate-limiting)."""
+        """
+        Fetch POIs with a single batched Overpass query.
+
+        Each category uses its own count radius (CATEGORY_COUNT_RADIUS_M).
+        A wider search radius (CATEGORY_SEARCH_RADIUS_M) ensures we always
+        find the nearest POI even when nothing is within the count radius.
+
+        Returns:
+            pois               – count within count radius per category
+            nearest_distances_km – distance to absolute nearest, regardless of radius
+            poi_names          – names within count radius (or nearest name if none)
+        """
         pois: Dict[str, int] = {k: 0 for _, k in self._TAG_CATEGORY_MAP}
         nearest_distances_km: Dict[str, float | None] = {k: None for _, k in self._TAG_CATEGORY_MAP}
         poi_names: Dict[str, list[str]] = {k: [] for _, k in self._TAG_CATEGORY_MAP}
@@ -57,49 +92,81 @@ class LifestyleAgent(BaseAgent):
         if latitude is None or longitude is None:
             return pois, nearest_distances_km, poi_names
 
-        transit_r = 1000  # bus/subway use tighter radius
-
+        # Use per-category SEARCH radius in the query so we can always find the nearest.
+        # Use `node` for bus/subway (always point features) and `nwr` only for area features.
+        sr = CATEGORY_SEARCH_RADIUS_M
         overpass_query = (
-            "[out:json][timeout:60];\n"
-            "(\n"
-            f'  nwr["amenity"="school"](around:{radius_m},{latitude},{longitude});\n'
-            f'  nwr["amenity"="hospital"](around:{radius_m},{latitude},{longitude});\n'
-            f'  nwr["highway"="bus_stop"](around:{transit_r},{latitude},{longitude});\n'
-            f'  nwr["railway"="subway_entrance"](around:{transit_r},{latitude},{longitude});\n'
-            f'  nwr["leisure"="park"](around:{radius_m},{latitude},{longitude});\n'
-            f'  nwr["shop"="supermarket"](around:{radius_m},{latitude},{longitude});\n'
-            f'  nwr["amenity"="restaurant"](around:{radius_m},{latitude},{longitude});\n'
-            ");\n"
-            "out center tags qt;"
+            "[out:json][timeout:30];\n(\n"
+            f'  nwr["amenity"="school"](around:{sr["school"]},{latitude},{longitude});\n'
+            f'  nwr["amenity"="hospital"](around:{sr["hospital"]},{latitude},{longitude});\n'
+            f'  node["highway"="bus_stop"](around:{sr["bus"]},{latitude},{longitude});\n'
+            f'  node["railway"="subway_entrance"](around:{sr["subway"]},{latitude},{longitude});\n'
+            f'  nwr["leisure"="park"](around:{sr["park"]},{latitude},{longitude});\n'
+            f'  node["shop"="supermarket"](around:{sr["supermarket"]},{latitude},{longitude});\n'
+            f'  node["amenity"="restaurant"](around:{sr["restaurant"]},{latitude},{longitude});\n'
+            ");\nout center tags qt;"
         )
 
         try:
-            response = httpx.post(
-                OVERPASS_ENDPOINT,
-                data={"data": overpass_query},
-                headers=OVERPASS_HEADERS,
-                timeout=60,
-            )
+            response = None
+            for endpoint in OVERPASS_ENDPOINTS:
+                try:
+                    r = httpx.post(
+                        endpoint,
+                        data={"data": overpass_query},
+                        headers=OVERPASS_HEADERS,
+                        timeout=30,
+                    )
+                    if r.status_code == 200:
+                        response = r
+                        break
+                    logger.warning("Overpass %s returned %s, trying next", endpoint, r.status_code)
+                except httpx.TimeoutException:
+                    logger.warning("Overpass %s timed out, trying next", endpoint)
+                except Exception as e:
+                    logger.warning("Overpass %s error: %s, trying next", endpoint, e)
 
-            if response.status_code != 200:
-                logger.warning("Overpass batch query failed: %s", response.status_code)
+            if response is None:
+                logger.error("All Overpass endpoints failed")
                 return pois, nearest_distances_km, poi_names
 
             elements = response.json().get("elements", [])
 
-            # Categorize each element by its OSM tags
+            # Bucket every element into its category
             buckets: Dict[str, list] = {k: [] for _, k in self._TAG_CATEGORY_MAP}
             for el in elements:
                 tags = el.get("tags") or {}
                 for (tag_key, tag_val), category in self._TAG_CATEGORY_MAP:
                     if tags.get(tag_key) == tag_val:
                         buckets[category].append(el)
-                        break  # assign to first matching category only
+                        break
 
             for category, els in buckets.items():
-                pois[category] = len(els)
-                nearest_distances_km[category] = self._nearest_distance_km(latitude, longitude, els)
-                poi_names[category] = self._extract_poi_names(els, category)
+                count_r_km = CATEGORY_COUNT_RADIUS_M[category] / 1000.0
+
+                # Split elements into "within count radius" and "outside"
+                within, outside = [], []
+                for el in els:
+                    d = self._element_distance_km(latitude, longitude, el)
+                    if d is not None and d <= count_r_km:
+                        within.append((d, el))
+                    else:
+                        outside.append((d, el))
+
+                # Count and names from within-radius set
+                pois[category] = len(within)
+                poi_names[category] = self._extract_poi_names([e for _, e in within], category)
+
+                # Nearest is absolute nearest across ALL elements (within + outside)
+                all_with_dist = [(d, el) for d, el in within + outside if d is not None]
+                if all_with_dist:
+                    nearest_d = min(d for d, _ in all_with_dist)
+                    nearest_distances_km[category] = round(nearest_d, 3)
+
+                    # If nothing within count radius, include the nearest element's name
+                    if not poi_names[category]:
+                        nearest_el = min(all_with_dist, key=lambda x: x[0])[1]
+                        poi_names[category] = self._extract_poi_names([nearest_el], category)
 
         except httpx.TimeoutException:
             logger.warning("Overpass API timeout")
@@ -108,19 +175,29 @@ class LifestyleAgent(BaseAgent):
 
         return pois, nearest_distances_km, poi_names
 
+    def _element_distance_km(self, lat: float, lon: float, element: dict) -> float | None:
+        """Compute distance in km from origin to a single Overpass element."""
+        el_lat = element.get("lat")
+        el_lon = element.get("lon")
+        if (el_lat is None or el_lon is None) and isinstance(element.get("center"), dict):
+            el_lat = element["center"].get("lat")
+            el_lon = element["center"].get("lon")
+        if el_lat is None or el_lon is None:
+            return None
+        return self._haversine_km(lat, lon, el_lat, el_lon)
+
     def score_lifestyle(
         self, latitude: float, longitude: float, radius_m: int = 5000
     ) -> Dict:
-        """Score lifestyle quality of a location using live Overpass POI data."""
+        """Score lifestyle quality using per-category radii (radius_m param is ignored)."""
         pois: Dict[str, int] = {}
         nearest_distances_km: Dict[str, float | None] = {}
         poi_names: Dict[str, list[str]] = {}
         try:
-            # Step 1: Retrieval - fetch POIs
+            # radius_m kept for API compatibility but per-category radii are used internally
             pois, nearest_distances_km, poi_names = self.get_pois_nearby(
                 latitude,
                 longitude,
-                radius_m=radius_m,
             )
 
             # Step 2: Augmented Generation - send to LLM (if available)
@@ -143,14 +220,11 @@ Places: {poi_text}"""
                     if result and "score" in result:
                         return {
                             "score": float(result.get("score", 5.0)),
-                            "description": result.get(
-                                "description", "Moderate lifestyle quality"
-                            ),
+                            "description": result.get("description", "Moderate lifestyle quality"),
                             "poi_counts": pois,
                             "nearest_distances_km": nearest_distances_km,
                             "poi_names": poi_names,
-                            "search_radius_km": round(radius_m / 1000.0, 2),
-                            "transit_search_radius_km": 1.0,
+                            "category_radii_km": {k: v / 1000 for k, v in CATEGORY_COUNT_RADIUS_M.items()},
                             "source": "llm",
                         }
             else:
@@ -160,28 +234,23 @@ Places: {poi_text}"""
             score = self._calculate_rule_based_score(pois)
             return {
                 "score": score,
-                "description": "Insufficient data for detailed analysis"
-                if score == 5.0
-                else f"Based on {sum(pois.values())} nearby places",
+                "description": f"{sum(pois.values())} yakın nokta bulundu" if sum(pois.values()) > 0 else "Yakında nokta bulunamadı",
                 "poi_counts": pois,
                 "nearest_distances_km": nearest_distances_km,
                 "poi_names": poi_names,
-                "search_radius_km": round(radius_m / 1000.0, 2),
-                "transit_search_radius_km": 1.0,
+                "category_radii_km": {k: v / 1000 for k, v in CATEGORY_COUNT_RADIUS_M.items()},
                 "source": "rule_based",
             }
 
         except Exception as e:
             logger.error(f"Error scoring lifestyle: {e}")
-            # Return whatever pois we managed to collect before the error
             return {
                 "score": self._calculate_rule_based_score(pois) if pois else 5.0,
                 "description": "Kısmi veri ile hesaplandı" if pois else "Konum verisi alınamadı",
                 "poi_counts": pois,
                 "nearest_distances_km": nearest_distances_km,
                 "poi_names": poi_names,
-                "search_radius_km": round(radius_m / 1000.0, 2),
-                "transit_search_radius_km": 1.0,
+                "category_radii_km": {k: v / 1000 for k, v in CATEGORY_COUNT_RADIUS_M.items()},
                 "source": "partial" if pois else "error",
             }
 

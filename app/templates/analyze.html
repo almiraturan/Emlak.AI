@@ -75,15 +75,6 @@
                     <div class="lifestyle-meta" id="lifestyleMeta">Arama yarıçapı: -</div>
                 </div>
 
-                <!-- Radius filter -->
-                <div class="radius-filter">
-                    <span class="radius-label">Yarıçap filtresi:</span>
-                    <button class="radius-btn active" data-km="1" onclick="applyRadiusFilter(1, this)">1 km</button>
-                    <button class="radius-btn" data-km="3" onclick="applyRadiusFilter(3, this)">3 km</button>
-                    <button class="radius-btn" data-km="5" onclick="applyRadiusFilter(5, this)">5 km</button>
-                    <span id="radiusLoading" style="display:none; color:#888; font-size:0.8rem;">⏳ Yükleniyor...</span>
-                </div>
-
                 <div class="poi-counts" id="poiCountsContainer">
                     <div class="poi-item" id="poiSchool">
                         <div class="poi-header">
@@ -217,14 +208,6 @@
 }
 .selected-listing-preview .preview-title { font-size: 1rem; color: #e0e0e0; }
 .selected-listing-preview .preview-meta { font-size: 0.82rem; color: #00d4aa; margin-top: 3px; }
-.radius-filter { display: flex; align-items: center; gap: 8px; margin: 12px 0 16px; flex-wrap: wrap; }
-.radius-label { font-size: 0.82rem; color: #888; }
-.radius-btn {
-    padding: 5px 14px; border-radius: 20px; border: 1px solid #00d4aa55;
-    background: transparent; color: #aaa; cursor: pointer; font-size: 0.82rem; transition: all 0.2s;
-}
-.radius-btn:hover { border-color: #00d4aa; color: #00d4aa; }
-.radius-btn.active { background: #00d4aa22; border-color: #00d4aa; color: #00d4aa; font-weight: 600; }
 .poi-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .poi-nearest { font-size: 0.8rem; color: #00d4aa; margin-bottom: 6px; font-weight: 500; }
 .poi-list { font-size: 0.78rem; color: #aaa; line-height: 1.5; }
@@ -233,7 +216,6 @@
     const DEMO_USER_ID = 1;
     let selectedListingId = null;
     let searchDebounce = null;
-    let currentRadiusKm = 1;  // default shown radius
 
     document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
@@ -396,25 +378,6 @@
         });
     }
 
-    async function applyRadiusFilter(km, btn) {
-        if (!selectedListingId) return;
-        // Update active button
-        document.querySelectorAll('.radius-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentRadiusKm = km;
-
-        document.getElementById('radiusLoading').style.display = 'inline';
-        try {
-            const resp = await fetch(`/api/agents/listing/${selectedListingId}/lifestyle?radius_km=${km}`);
-            const data = await resp.json();
-            displayLifestyle(data);
-        } catch (e) {
-            console.error('Radius filter error:', e);
-        } finally {
-            document.getElementById('radiusLoading').style.display = 'none';
-        }
-    }
-
     function formatDistance(value) {
         if (value === null || value === undefined) return null;
         const d = Number(value);
@@ -430,6 +393,9 @@
         return `${listed}${nearestStr}`;
     }
 
+    // Default count radii per category (must match backend CATEGORY_COUNT_RADIUS_M)
+    const CATEGORY_RADII = { school: 1, hospital: 3, bus: 1, subway: 1, park: 1 };
+
     function displayLifestyle(ls) {
         if (!ls) return;
         const score = Math.round(ls.score ?? 5);
@@ -439,35 +405,45 @@
         const pois = ls.poi_counts || {};
         const distances = ls.nearest_distances_km || {};
         const names = ls.poi_names || {};
-        const radiusKm = ls.search_radius_km ?? null;
-        const transitRadiusKm = ls.transit_search_radius_km ?? 1;
+        const radii = ls.category_radii_km || CATEGORY_RADII;
 
-        // Counts
+        // Count: transit = bus + subway
+        const transitCount = (pois.bus ?? 0) + (pois.subway ?? 0);
         document.getElementById('schoolCount').textContent = pois.school ?? 0;
         document.getElementById('hospitalCount').textContent = pois.hospital ?? 0;
-        document.getElementById('transitCount').textContent = (pois.bus ?? 0) + (pois.subway ?? 0);
+        document.getElementById('transitCount').textContent = transitCount;
         document.getElementById('parkCount').textContent = pois.park ?? 0;
 
-        // Nearest distance (compact in header)
-        const fmtNearest = (d) => d != null ? `En yakın: ${formatDistance(d)}` : 'En yakın: —';
-        document.getElementById('schoolDistance').textContent = fmtNearest(distances.school);
+        // Per-category nearest distance label
+        const fmtNearest = (d, countR, count) => {
+            if (d == null) return `${countR} km içinde arandı`;
+            const dStr = formatDistance(d);
+            if (count > 0) return `En yakın: ${dStr}`;
+            return `En yakın: ${dStr} ötede`;  // outside count radius
+        };
+
         const transitNearest = [distances.bus, distances.subway]
             .filter(v => v != null).reduce((min, v) => min === null ? v : Math.min(min, v), null);
-        document.getElementById('hospitalDistance').textContent = fmtNearest(distances.hospital);
-        document.getElementById('transitDistance').textContent = fmtNearest(transitNearest);
-        document.getElementById('parkDistance').textContent = fmtNearest(distances.park);
 
-        // Name lists with nearest in parens
+        document.getElementById('schoolDistance').textContent =
+            fmtNearest(distances.school, radii.school ?? 1, pois.school ?? 0);
+        document.getElementById('hospitalDistance').textContent =
+            fmtNearest(distances.hospital, radii.hospital ?? 3, pois.hospital ?? 0);
+        document.getElementById('transitDistance').textContent =
+            fmtNearest(transitNearest, radii.bus ?? 1, transitCount);
+        document.getElementById('parkDistance').textContent =
+            fmtNearest(distances.park, radii.park ?? 1, pois.park ?? 0);
+
+        // Name lists
         const transitNames = [...new Set([...(names.bus || []), ...(names.subway || [])])];
         document.getElementById('schoolNames').innerHTML = formatPoiNames(names.school, distances.school);
         document.getElementById('hospitalNames').innerHTML = formatPoiNames(names.hospital, distances.hospital);
         document.getElementById('transitNames').innerHTML = formatPoiNames(transitNames, transitNearest);
         document.getElementById('parkNames').innerHTML = formatPoiNames(names.park, distances.park);
 
+        // Meta info: show per-category radii
         document.getElementById('lifestyleMeta').textContent =
-            radiusKm === null
-                ? 'Arama yarıçapı: —'
-                : `Arama yarıçapı: ${Number(radiusKm).toFixed(1)} km  |  Toplu taşıma: ${Number(transitRadiusKm).toFixed(1)} km`;
+            `Okul: ${radii.school ?? 1} km  ·  Hastane: ${radii.hospital ?? 3} km  ·  Toplu taşıma: ${radii.bus ?? 1} km  ·  Park: ${radii.park ?? 1} km`;
     }
 
     function displayResults(data) {
