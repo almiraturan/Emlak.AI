@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.schemas.listing import ListingCardResponse
-from app.services.chatbot import build_reply, match_listings, parse_message, analyze_user_input
+from app.services.chatbot import build_reply, match_listings, parse_message, analyze_user_input, _is_no_intent, _CHITCHAT_MAP, _GREETING_PAT, _strip
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -34,10 +34,26 @@ class ChatResponse(BaseModel):
 @router.post("", response_model=ChatResponse)
 def chat(req: ChatRequest, db: Session = Depends(get_db)):
     filters = parse_message(req.message)
-    
+    text_norm = _strip(req.message)
+
+    # Fast-path: greeting or chitchat — skip DB queries entirely
+    is_greeting = bool(_GREETING_PAT.match(text_norm))
+    is_chitchat = any(p.search(text_norm) for p, _ in _CHITCHAT_MAP)
+    is_no_intent = _is_no_intent(filters)
+
+    if is_greeting or is_chitchat or is_no_intent:
+        reply = build_reply(req.message, filters, [], 0)
+        return ChatResponse(
+            reply=reply,
+            filters=filters.to_dict(),
+            listings=[],
+            total_matched=0,
+            user_analysis=UserInputAnalysis(intent="consult", lifecycle="unknown", priority=[], summary=""),
+        )
+
     # Analyze user input for detailed requirements
     user_analysis = analyze_user_input(req.message)
-    
+
     # Apply POI requirements from user analysis
     if user_analysis.get('poi_requirements'):
         poi_reqs = user_analysis['poi_requirements']
@@ -46,7 +62,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         filters.needs_school_nearby = poi_reqs.get('school_nearby', filters.needs_school_nearby)
         filters.needs_hospital_nearby = poi_reqs.get('hospital_nearby', filters.needs_hospital_nearby)
         filters.needs_bus_metro_nearby = poi_reqs.get('bus_metro_nearby', filters.needs_bus_metro_nearby)
-    
+
     picks = match_listings(db, filters, limit=5)
 
     # Total matched (without limit) for the reply text.

@@ -94,14 +94,23 @@
                         <div class="poi-nearest" id="hospitalDistance">-</div>
                         <div class="poi-list" id="hospitalNames">-</div>
                     </div>
-                    <div class="poi-item" id="poiTransit">
+                    <div class="poi-item" id="poiBus">
                         <div class="poi-header">
                             <span class="poi-icon">🚌</span>
-                            <span class="poi-name">Toplu Taşıma</span>
-                            <span class="poi-count" id="transitCount">-</span>
+                            <span class="poi-name">Otobüs</span>
+                            <span class="poi-count" id="busCount">-</span>
                         </div>
-                        <div class="poi-nearest" id="transitDistance">-</div>
-                        <div class="poi-list" id="transitNames">-</div>
+                        <div class="poi-nearest" id="busDistance">-</div>
+                        <div class="poi-list" id="busNames">-</div>
+                    </div>
+                    <div class="poi-item" id="poiMetro">
+                        <div class="poi-header">
+                            <span class="poi-icon">🚇</span>
+                            <span class="poi-name">Metro / Tramvay</span>
+                            <span class="poi-count" id="metroCount">-</span>
+                        </div>
+                        <div class="poi-nearest" id="metroDistance">-</div>
+                        <div class="poi-list" id="metroNames">-</div>
                     </div>
                     <div class="poi-item" id="poiPark">
                         <div class="poi-header">
@@ -407,11 +416,10 @@
         const names = ls.poi_names || {};
         const radii = ls.category_radii_km || CATEGORY_RADII;
 
-        // Count: transit = bus + subway
-        const transitCount = (pois.bus ?? 0) + (pois.subway ?? 0);
         document.getElementById('schoolCount').textContent = pois.school ?? 0;
         document.getElementById('hospitalCount').textContent = pois.hospital ?? 0;
-        document.getElementById('transitCount').textContent = transitCount;
+        document.getElementById('busCount').textContent = pois.bus ?? 0;
+        document.getElementById('metroCount').textContent = pois.subway ?? 0;
         document.getElementById('parkCount').textContent = pois.park ?? 0;
 
         // Per-category nearest distance label
@@ -419,31 +427,30 @@
             if (d == null) return `${countR} km içinde arandı`;
             const dStr = formatDistance(d);
             if (count > 0) return `En yakın: ${dStr}`;
-            return `En yakın: ${dStr} ötede`;  // outside count radius
+            return `En yakın: ${dStr} ötede`;
         };
-
-        const transitNearest = [distances.bus, distances.subway]
-            .filter(v => v != null).reduce((min, v) => min === null ? v : Math.min(min, v), null);
 
         document.getElementById('schoolDistance').textContent =
             fmtNearest(distances.school, radii.school ?? 1, pois.school ?? 0);
         document.getElementById('hospitalDistance').textContent =
             fmtNearest(distances.hospital, radii.hospital ?? 3, pois.hospital ?? 0);
-        document.getElementById('transitDistance').textContent =
-            fmtNearest(transitNearest, radii.bus ?? 1, transitCount);
+        document.getElementById('busDistance').textContent =
+            fmtNearest(distances.bus, radii.bus ?? 1, pois.bus ?? 0);
+        document.getElementById('metroDistance').textContent =
+            fmtNearest(distances.subway, radii.subway ?? 1, pois.subway ?? 0);
         document.getElementById('parkDistance').textContent =
             fmtNearest(distances.park, radii.park ?? 1, pois.park ?? 0);
 
         // Name lists
-        const transitNames = [...new Set([...(names.bus || []), ...(names.subway || [])])];
         document.getElementById('schoolNames').innerHTML = formatPoiNames(names.school, distances.school);
         document.getElementById('hospitalNames').innerHTML = formatPoiNames(names.hospital, distances.hospital);
-        document.getElementById('transitNames').innerHTML = formatPoiNames(transitNames, transitNearest);
+        document.getElementById('busNames').innerHTML = formatPoiNames(names.bus, distances.bus);
+        document.getElementById('metroNames').innerHTML = formatPoiNames(names.subway, distances.subway);
         document.getElementById('parkNames').innerHTML = formatPoiNames(names.park, distances.park);
 
         // Meta info: show per-category radii
         document.getElementById('lifestyleMeta').textContent =
-            `Okul: ${radii.school ?? 1} km  ·  Hastane: ${radii.hospital ?? 3} km  ·  Toplu taşıma: ${radii.bus ?? 1} km  ·  Park: ${radii.park ?? 1} km`;
+            `Okul: ${radii.school ?? 1} km  ·  Hastane: ${radii.hospital ?? 3} km  ·  Otobüs: ${radii.bus ?? 1} km  ·  Metro: ${radii.subway ?? 1} km  ·  Park: ${radii.park ?? 1} km`;
     }
 
     function displayResults(data) {

@@ -1,66 +1,294 @@
 {% extends "base.html" %}
 
-{% block title %}Dashboard - EmlakAI{% endblock %}
+{% block title %}EmlakAI — Hayalinizdeki Evi AI ile Bulun{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ── Hero ── */
+.home-hero {
+    text-align: center;
+    padding: 4rem 1.5rem 2rem;
+}
+.home-eyebrow {
+    display: inline-block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #00d4aa;
+    margin-bottom: 1rem;
+}
+.home-title {
+    font-size: clamp(2.2rem, 5vw, 3.8rem);
+    font-weight: 800;
+    line-height: 1.1;
+    margin: 0 0 1rem;
+    background: linear-gradient(135deg, #e2e8f0 30%, #00d4aa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.home-sub {
+    color: rgba(255,255,255,0.6);
+    font-size: 1.05rem;
+    max-width: 520px;
+    margin: 0 auto 2.5rem;
+}
+
+/* ── Chat Box ── */
+.home-chat-wrap {
+    max-width: 780px;
+    margin: 0 auto;
+}
+.home-chat-box {
+    background: rgba(10,15,30,0.72);
+    border: 1px solid rgba(0,212,170,0.25);
+    border-radius: 20px;
+    overflow: hidden;
+    backdrop-filter: blur(18px);
+    box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+}
+.home-chat-topbar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.9rem 1.25rem;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: rgba(0,212,170,0.06);
+}
+.home-chat-avatar {
+    width: 2rem; height: 2rem;
+    background: linear-gradient(135deg,#00d4aa,#0ea5e9);
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 1rem;
+}
+.home-chat-name { font-weight: 700; font-size: 0.9rem; color: #e2e8f0; }
+.home-chat-status { font-size: 0.75rem; color: #00d4aa; }
+.home-chat-log {
+    min-height: 220px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    scroll-behavior: smooth;
+}
+.home-chat-log::-webkit-scrollbar { width: 4px; }
+.home-chat-log::-webkit-scrollbar-thumb { background: rgba(0,212,170,0.3); border-radius: 4px; }
+.chat-msg { display: flex; gap: 0.6rem; max-width: 88%; }
+.chat-msg.user { align-self: flex-end; flex-direction: row-reverse; }
+.chat-msg.bot  { align-self: flex-start; }
+.chat-bubble {
+    padding: 0.65rem 1rem;
+    border-radius: 14px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+}
+.chat-msg.user .chat-bubble {
+    background: linear-gradient(135deg,#00d4aa22,#0ea5e922);
+    border: 1px solid #00d4aa44;
+    color: #e2e8f0;
+}
+.chat-msg.bot .chat-bubble {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: #cbd5e1;
+}
+.chat-msg-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 2px; }
+.typing-dots span {
+    display: inline-block;
+    width: 6px; height: 6px;
+    background: #00d4aa;
+    border-radius: 50%;
+    animation: typingBounce 1.2s infinite;
+    margin: 0 1px;
+}
+.typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+.typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingBounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+.home-chat-form {
+    display: flex;
+    gap: 0.5rem;
+    padding: 1rem 1.25rem;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    background: rgba(0,0,0,0.15);
+}
+.home-chat-input {
+    flex: 1;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px;
+    color: #f8fafc;
+    padding: 0.75rem 1rem;
+    font-size: 0.92rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.home-chat-input:focus { border-color: #00d4aa66; }
+.home-chat-input::placeholder { color: rgba(255,255,255,0.35); }
+.home-chat-send {
+    padding: 0.75rem 1.5rem;
+    background: linear-gradient(135deg,#00d4aa,#0ea5e9);
+    border: none; border-radius: 12px;
+    color: #0a0f1e; font-weight: 700; font-size: 0.88rem;
+    cursor: pointer; white-space: nowrap;
+    transition: filter 0.2s;
+}
+.home-chat-send:hover { filter: brightness(1.1); }
+.home-chat-send:disabled { opacity: 0.55; cursor: progress; }
+
+/* Chips */
+.home-chips {
+    display: flex; gap: 0.5rem; flex-wrap: wrap;
+    justify-content: center; margin-top: 1rem;
+}
+.home-chip {
+    padding: 0.4rem 0.9rem;
+    border: 1px solid rgba(0,212,170,0.35);
+    border-radius: 999px;
+    background: transparent; color: #94a3b8;
+    font-size: 0.82rem; cursor: pointer;
+    transition: all 0.15s;
+}
+.home-chip:hover { border-color: #00d4aa; color: #00d4aa; background: rgba(0,212,170,0.08); }
+
+/* ── Recommended Listings Grid ── */
+.home-recs {
+    max-width: 1100px;
+    margin: 2.5rem auto 0;
+    padding: 0 1rem;
+}
+.home-recs-title {
+    font-size: 1rem; font-weight: 700; color: #00d4aa;
+    margin-bottom: 1rem;
+    display: flex; align-items: center; gap: 0.5rem;
+}
+.home-recs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem;
+}
+.home-rec-card {
+    background: rgba(10,15,30,0.72);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px;
+    padding: 1.2rem;
+    display: flex; flex-direction: column; gap: 0.75rem;
+    animation: slideInUp 0.35s ease both;
+    transition: border-color 0.2s;
+}
+.home-rec-card:hover { border-color: rgba(0,212,170,0.35); }
+@keyframes slideInUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+.home-rec-rank {
+    font-size: 0.72rem; font-weight: 700; color: #00d4aa;
+    text-transform: uppercase; letter-spacing: 0.08em;
+}
+.home-rec-title { font-size: 0.95rem; font-weight: 700; color: #e2e8f0; line-height: 1.35; }
+.home-rec-meta { font-size: 0.8rem; color: #94a3b8; }
+.home-rec-price { font-size: 1.1rem; font-weight: 800; color: #00d4aa; }
+.home-rec-score {
+    display: inline-flex; align-items: center; gap: 0.3rem;
+    background: rgba(0,212,170,0.12); border-radius: 8px;
+    padding: 0.2rem 0.6rem; font-size: 0.8rem; font-weight: 700; color: #00d4aa;
+}
+.home-rec-actions { display: flex; gap: 0.5rem; margin-top: auto; }
+.home-rec-btn {
+    flex: 1; padding: 0.55rem 0.5rem;
+    border-radius: 10px; border: none;
+    font-size: 0.8rem; font-weight: 700;
+    cursor: pointer; text-align: center; text-decoration: none;
+    display: inline-block; transition: filter 0.2s;
+}
+.home-rec-btn.primary {
+    background: linear-gradient(135deg,#00d4aa,#0ea5e9);
+    color: #0a0f1e;
+}
+.home-rec-btn.secondary {
+    background: rgba(255,255,255,0.07);
+    color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1);
+}
+.home-rec-btn:hover { filter: brightness(1.12); }
+
+/* ── Features ── */
+.features-section { max-width: 1100px; margin: 4rem auto 2rem; padding: 0 1rem; }
+.features-title { font-size: 1.5rem; font-weight: 800; margin-bottom: 1.5rem; }
+.feature-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px,1fr)); gap: 1rem; }
+.feature-card { padding: 1.5rem; }
+.feature-icon { font-size: 1.8rem; margin-bottom: 0.75rem; }
+.feature-name { font-size: 1rem; font-weight: 700; margin-bottom: 0.4rem; }
+.feature-desc { font-size: 0.85rem; color: rgba(255,255,255,0.55); line-height: 1.5; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="dashboard-page">
 
-    <!-- Hero Section -->
-    <section class="hero-v2">
-        <div class="hero-v2-inner">
-            <span class="hero-eyebrow">AI Odaklı Gayrimenkul</span>
-            <h1 class="hero-main-title">Hayalinizdeki Evi<br>AI ile Bulun</h1>
-            <p class="hero-subtitle">Türkiye'nin en akıllı emlak arama platformu — fiyat analizi, yaşam kalitesi skoru ve kişisel öneriler.</p>
+    <!-- Hero + Chatbot -->
+    <section class="home-hero">
+        <span class="home-eyebrow">AI Odaklı Gayrimenkul</span>
+        <h1 class="home-title">Hayalinizdeki Evi<br>AI ile Bulun</h1>
+        <p class="home-sub">Ne aradığını yaz, yapay zeka sana en uygun ilanları bulsun.</p>
 
-            <div class="hero-search-wrap">
-                <div class="hero-search-bar">
-                    <span class="hero-search-icon">📍</span>
-                    <input type="text" id="heroSearch" class="hero-search-input" placeholder="Şehir, ilçe ya da mahalle ara...">
-                    <button class="hero-search-btn" onclick="handleHeroSearch()">Ara</button>
+        <div class="home-chat-wrap">
+            <div class="home-chat-box">
+                <div class="home-chat-topbar">
+                    <div class="home-chat-avatar">🤖</div>
+                    <div>
+                        <div class="home-chat-name">Emlak Asistanı</div>
+                        <div class="home-chat-status">● Çevrimiçi</div>
+                    </div>
                 </div>
-                <div class="hero-chips">
-                    <button class="hero-chip" onclick="setHeroSearch('Kadıköy')">Kadıköy</button>
-                    <button class="hero-chip" onclick="setHeroSearch('Beşiktaş')">Beşiktaş</button>
-                    <button class="hero-chip" onclick="setHeroSearch('3+1')">3+1</button>
-                    <button class="hero-chip" onclick="setHeroSearch('İstanbul')">İstanbul</button>
-                    <button class="hero-chip" onclick="setHeroSearch('Ataşehir')">Ataşehir</button>
+                <div id="homeChatLog" class="home-chat-log">
+                    <div class="chat-msg bot">
+                        <span class="chat-msg-icon">🤖</span>
+                        <div class="chat-bubble">Merhaba! Ben EmlakAI. Sana en uygun evi bulmana yardım edebilirim. Hangi şehirde, kaç odalı, bütçen ne kadar?</div>
+                    </div>
                 </div>
+                <form id="homeChatForm" class="home-chat-form" autocomplete="off">
+                    <input id="homeChatInput" class="home-chat-input" type="text"
+                           placeholder="ör: Ankara'da 3+1, köpek dostu, 5M altı..." />
+                    <button type="submit" id="homeChatSend" class="home-chat-send">Gönder</button>
+                </form>
+            </div>
+            <div class="home-chips">
+                <button class="home-chip" onclick="quickChat('Kadıköy\'de 2+1 daire')">Kadıköy 2+1</button>
+                <button class="home-chip" onclick="quickChat('Ankara\'da aile için 4+1')">Ankara 4+1</button>
+                <button class="home-chip" onclick="quickChat('İstanbul\'da köpek dostu ev')">Köpek Dostu</button>
+                <button class="home-chip" onclick="quickChat('Beşiktaş\'ta 3+1 max 8M')">Beşiktaş 3+1</button>
+                <button class="home-chip" onclick="quickChat('Yaşam skoru yüksek ev')">Yaşam Skoru Yüksek</button>
             </div>
         </div>
     </section>
 
-    <!-- AI Features Section -->
+    <!-- AI Recommendation Results -->
+    <div id="homeRecs" class="home-recs" style="display:none;">
+        <div class="home-recs-title">✨ <span id="homeRecsTitle">AI Önerileri</span></div>
+        <div id="homeRecsGrid" class="home-recs-grid"></div>
+    </div>
+
+    <!-- AI Features -->
     <section class="features-section">
         <h2 class="features-title">AI Özellikleri</h2>
         <div class="feature-cards">
-
             <div class="feature-card glass">
-                <div class="feature-icon fi-price">📊</div>
+                <div class="feature-icon">📊</div>
                 <h3 class="feature-name">Fiyat Analizi</h3>
                 <p class="feature-desc">XGBoost ile değer tahmini. Overpriced / fair / underpriced verir.</p>
             </div>
-
             <div class="feature-card glass">
-                <div class="feature-icon fi-lifestyle">🌿</div>
+                <div class="feature-icon">🌿</div>
                 <h3 class="feature-name">Yaşam Skoru</h3>
                 <p class="feature-desc">Çevredeki okul, hastane, metro ve park verisiyle 1–10 skor.</p>
             </div>
-
             <div class="feature-card glass">
-                <div class="feature-icon fi-rec">✨</div>
+                <div class="feature-icon">✨</div>
                 <h3 class="feature-name">Akıllı Öneri</h3>
-                <p class="feature-desc">Davranışınıza göre SVD ile kişiselleştirilmiş ilan önerileri.</p>
+                <p class="feature-desc">Davranışınıza göre kişiselleştirilmiş ilan önerileri.</p>
             </div>
-
-        </div>
-    </section>
-
-    <!-- CTA Buttons -->
-    <section class="cta-section">
-        <div class="cta-row">
-            <a href="/listings" class="btn-cta btn-cta-green">🏠 Tüm İlanları Gör</a>
-            <a href="#" class="btn-cta btn-cta-purple" id="chatCta">💬 AI ile Sohbet Et</a>
-            <a href="/analyze" class="btn-cta btn-cta-amber">✨ AI Analizi Başlat</a>
         </div>
     </section>
 
@@ -69,49 +297,142 @@
 
 {% block extra_js %}
 <script>
-    function handleHeroSearch() {
-        const q = document.getElementById('heroSearch').value.trim();
-        if (q) window.location.href = '/listings?search=' + encodeURIComponent(q);
-        else window.location.href = '/listings';
+const DEMO_USER_ID = 1;
+let homeRecommendedListings = [];
+
+const chatLog   = document.getElementById('homeChatLog');
+const chatForm  = document.getElementById('homeChatForm');
+const chatInput = document.getElementById('homeChatInput');
+const chatSend  = document.getElementById('homeChatSend');
+
+function appendMsg(role, text) {
+    const div = document.createElement('div');
+    div.className = `chat-msg ${role}`;
+    const icon = role === 'bot' ? '🤖' : '👤';
+    div.innerHTML = `<span class="chat-msg-icon">${icon}</span><div class="chat-bubble">${escapeHtml(text)}</div>`;
+    chatLog.appendChild(div);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    return div;
+}
+
+function appendTyping() {
+    const div = document.createElement('div');
+    div.className = 'chat-msg bot';
+    div.innerHTML = `<span class="chat-msg-icon">🤖</span><div class="chat-bubble"><span class="typing-dots"><span></span><span></span><span></span></span></div>`;
+    chatLog.appendChild(div);
+    chatLog.scrollTop = chatLog.scrollHeight;
+    return div;
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function detectNavIntent(rawText) {
+    if (homeRecommendedListings.length === 0) return null;
+    const t = rawText.toLowerCase()
+        .replace(/ı/g,'i').replace(/ğ/g,'g').replace(/ş/g,'s')
+        .replace(/ç/g,'c').replace(/ö/g,'o').replace(/ü/g,'u');
+    const hasListing = /(ilan|daire|tavsiye|oneri|ev)/.test(t);
+    const hasAction  = /\b(gotur|getir|goster|git|ac|incele|analiz|ver|bak|ne)\b/.test(t);
+    if (!hasListing && !hasAction) return null;
+    if (/\bilk\b/.test(t)) return 1;
+    const ordinals = [['birinci',1],['ikinci',2],['ucuncu',3],['dorduncu',4],['besinci',5]];
+    for (const [w,n] of ordinals) { if (t.includes(w)) return n; }
+    const m = t.match(/\b([1-5])\.\s*(ilan|ev|daire|tavsiye|oneri)/);
+    if (m) return parseInt(m[1]);
+    return null;
+}
+
+async function sendHomeChat(text) {
+    if (!text.trim()) return;
+    chatInput.value = '';
+    chatSend.disabled = true;
+
+    appendMsg('user', text);
+
+    // Navigation intent — go directly to listing page
+    const navRank = detectNavIntent(text);
+    if (navRank !== null) {
+        const target = homeRecommendedListings[navRank - 1];
+        if (target) {
+            appendMsg('bot', `${navRank}. ilan açılıyor: ${target.title}`);
+            setTimeout(() => window.location.href = `/analyze?listing_id=${target.id}`, 800);
+        } else {
+            appendMsg('bot', `${navRank}. öneri bulunamadı. Elimde ${homeRecommendedListings.length} tavsiye var.`);
+        }
+        chatSend.disabled = false;
+        return;
     }
 
-    function setHeroSearch(val) {
-        document.getElementById('heroSearch').value = val;
-        handleHeroSearch();
+    const typing = appendTyping();
+    try {
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, user_id: DEMO_USER_ID }),
+        });
+        const data = await res.json();
+        typing.remove();
+        appendMsg('bot', data.reply || '...');
+        homeRecommendedListings = data.listings || [];
+        if (homeRecommendedListings.length > 0) {
+            renderHomeRecs(homeRecommendedListings);
+        }
+    } catch (e) {
+        typing.remove();
+        appendMsg('bot', 'Bağlantı hatası, lütfen tekrar deneyin.');
     }
+    chatSend.disabled = false;
+}
 
-    document.getElementById('heroSearch').addEventListener('keydown', e => {
-        if (e.key === 'Enter') handleHeroSearch();
-    });
+function renderHomeRecs(listings) {
+    const grid  = document.getElementById('homeRecsGrid');
+    const wrap  = document.getElementById('homeRecs');
+    const title = document.getElementById('homeRecsTitle');
+    title.textContent = `AI Önerileri · ${listings.length} sonuç`;
 
-    document.getElementById('chatCta').addEventListener('click', e => {
-        e.preventDefault();
-        if (typeof openChat === 'function') openChat();
-        else window.location.href = '/listings';
-    });
+    grid.innerHTML = listings.map((l, i) => {
+        const price    = l.price ? `₺${Math.round(l.price).toLocaleString('tr-TR')}` : '—';
+        const meta     = [l.district, l.city, l.room_count_total ? `${l.room_count_total} oda` : ''].filter(Boolean).join(' · ');
+        const score    = l.lifestyle_score != null ? `🌿 ${Number(l.lifestyle_score).toFixed(1)}/10` : '';
+        const verdict  = l.price_verdict ? `<span class="verdict-pill verdict-${l.price_verdict}">${
+            l.price_verdict === 'underpriced' ? '💚 Uygun' :
+            l.price_verdict === 'overpriced'  ? '🔴 Pahalı' : '🟡 Adil'
+        }</span>` : '';
+        return `
+        <div class="home-rec-card" style="animation-delay:${i*0.05}s">
+            <div class="home-rec-rank">${i+1}. Öneri</div>
+            <div class="home-rec-title">${escapeHtml(l.title || 'İlan #'+l.id)}</div>
+            <div class="home-rec-meta">${escapeHtml(meta)}</div>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                <div class="home-rec-price">${price}</div>
+                ${score ? `<div class="home-rec-score">${score}</div>` : ''}
+                ${verdict}
+            </div>
+            <div class="home-rec-actions">
+                <a href="/analyze?listing_id=${l.id}" class="home-rec-btn primary">📊 Analiz Et</a>
+                <a href="/listings" class="home-rec-btn secondary">🏠 Tüm İlanlar</a>
+            </div>
+        </div>`;
+    }).join('');
 
-    // Navbar status
-    document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            const r = await fetch('/api/agents/profile/1');
-            updateStatusIndicator('backendStatus', r.ok);
-        } catch { updateStatusIndicator('backendStatus', false); }
+    wrap.style.display = 'block';
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
-        try {
-            const r = await fetch('http://localhost:11434/api/tags');
-            updateStatusIndicator('ollamaStatus', r.ok);
-        } catch { updateStatusIndicator('ollamaStatus', false); }
+chatForm.addEventListener('submit', e => {
+    e.preventDefault();
+    sendHomeChat(chatInput.value.trim());
+});
 
-        setInterval(async () => {
-            try { updateStatusIndicator('backendStatus', (await fetch('/api/agents/profile/1')).ok); } catch { updateStatusIndicator('backendStatus', false); }
-            try { updateStatusIndicator('ollamaStatus', (await fetch('http://localhost:11434/api/tags')).ok); } catch { updateStatusIndicator('ollamaStatus', false); }
-        }, 5000);
-    });
+chatInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatForm.dispatchEvent(new Event('submit')); }
+});
 
-    function updateStatusIndicator(id, active) {
-        const dot = document.getElementById(id)?.querySelector('.status-dot');
-        if (!dot) return;
-        dot.classList.toggle('active', active);
-    }
+function quickChat(text) {
+    chatInput.value = text;
+    sendHomeChat(text);
+}
 </script>
 {% endblock %}

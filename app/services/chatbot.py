@@ -67,7 +67,9 @@ _NATURE_WORDS = ("orman", "yesil alan", "doga", "agac", "nehir", "koy", "bahceli
 _NIGHTLIFE_WORDS = ("gece hayati", "bar", "eglence mekan", "kafe cok", "alisveris merkez")
 _FAMILY_WORDS = ("aile", "cocuklu", "genis aile", "buyuk aile", "ebeveyn")
 _ELDERLY_WORDS = ("yasli", "emekli", "nine", "dede", "buyukanne", "buyukbaba")
-_TRANSPORT_WORDS = ("metro", "metrobus", "otobus", "tramvay", "ulasim", "toplu tasima", "durak", "istasyon", "raylı sistem")
+_METRO_WORDS = ("metro", "metrobus", "tramvay", "rayli sistem", "metro duragi", "tren")
+_BUS_WORDS = ("otobus", "dolmus", "minibus", "otobus duragi")
+_TRANSPORT_WORDS = ("ulasim", "toplu tasima", "durak", "istasyon")
 _NEWLYWED_WORDS = ("yeni evli", "yeni evlendik", "nisanliyiz", "nisanlandi", "evleniyoruz", "evliyoruz", "cift olarak", "iki kisilik yasam")
 
 # Turkish number words → int (Turkish only)
@@ -102,12 +104,14 @@ class ChatFilters:
     context: str = ""
     
     # POI-based filtering (for pets, children, elderly, health)
-    needs_park_nearby: bool = False  # Pets, recreation
-    needs_playground_nearby: bool = False  # Children
-    needs_school_nearby: bool = False  # Children
-    needs_hospital_nearby: bool = False  # Elderly, chronic illness
-    needs_bus_metro_nearby: bool = False  # Transport-dependent
-    poi_max_distance_km: float = 2.0  # Max acceptable POI distance
+    needs_park_nearby: bool = False
+    needs_playground_nearby: bool = False
+    needs_school_nearby: bool = False
+    needs_hospital_nearby: bool = False
+    needs_metro_nearby: bool = False   # subway/tramway specifically
+    needs_bus_nearby: bool = False     # bus stop specifically
+    needs_bus_metro_nearby: bool = False  # any public transport
+    poi_max_distance_km: float = 2.0
 
     def to_dict(self) -> dict:
         d = {k: v for k, v in self.__dict__.items() if v not in (None, [], "")}
@@ -340,11 +344,29 @@ def parse_message(message: str) -> ChatFilters:
         if not f.context:
             f.context = "nightlife"
 
-    # --- Transport proximity ---
+    # --- Transport proximity (detect specific type first) ---
+    if any(w in text for w in _METRO_WORDS):
+        if "metro yakını" not in f.keywords:
+            f.keywords.append("metro yakını")
+        f.needs_metro_nearby = True
+        f.needs_bus_metro_nearby = True
+        if not f.context:
+            f.context = "transport"
+
+    if any(w in text for w in _BUS_WORDS):
+        if "otobüs yakını" not in f.keywords:
+            f.keywords.append("otobüs yakını")
+        f.needs_bus_nearby = True
+        f.needs_bus_metro_nearby = True
+        if not f.context:
+            f.context = "transport"
+
     if any(w in text for w in _TRANSPORT_WORDS):
         if "toplu taşıma yakını" not in f.keywords:
             f.keywords.append("toplu taşıma yakını")
-        f.needs_bus_metro_nearby = True  # NEW: POI requirement
+        f.needs_bus_metro_nearby = True
+        if not f.context:
+            f.context = "transport"
 
     # --- Building features: balkon, bahçe, asansör, garaj, güvenlik, manzara ---
     _feature_map = {
@@ -508,12 +530,48 @@ def _contextual_explanation(context: str, picks: list[Listing]) -> str:
 
 
 _GREETING_PAT = re.compile(
-    r"^(merhaba|selam|hey|iyi gunler|iyi aksam|nasilsin|nasilsiniz|naber|ne haber|nasil yardimci)\b"
+    r"^(merhaba|selam|hey|iyi gunler|iyi aksam|nasilsin|nasilsiniz|naber|ne haber|nasil yardimci|gunaydın|gunaydin|iyi aksamlar|iyi geceler)\b"
 )
+
+_CHITCHAT_MAP = [
+    (re.compile(r"kimsin\w*|ne yapabilirsin\w*|nasil calisin\w*|hakkinda bilgi|nasil kullanilir\w*"),
+     "Ben EmlakAI — yapay zeka destekli emlak asistanıyım! 🤖\n\n"
+     "Şunları yapabilirim:\n"
+     "• Kriterlerinize göre ev bulma (şehir, oda, bütçe)\n"
+     "• Fiyat analizi — overpriced mi, adil mi?\n"
+     "• Yaşam kalitesi skoru (çevre, yeşil alan, metro)\n"
+     "• Çevredeki okul, hastane, otobüs/metro mesafesi\n\n"
+     "Hangi şehirde, kaç oda arıyorsunuz?"),
+    (re.compile(r"tesekkur\w*|sagol|eyvallah"),
+     "Rica ederim! 😊 Başka bir ev aramanıza yardımcı olabilir miyim?"),
+    (re.compile(r"^(tamam|peki|anladim\w*|tamamdir|oldu|anlasild\w*)$"),
+     "Harika! 😊 Başka bir şey aramak ister misiniz?\n\nÖrnek: *'Ankara'da 3+1, max 5 milyon'*"),
+    (re.compile(r"^(yardim|help)$"),
+     "Tabii! Şu şekilde arama yapabilirsiniz:\n\n"
+     "• Konum: *Kadıköy'de daire*\n"
+     "• Oda: *3+1*, *en az 2 oda*\n"
+     "• Bütçe: *max 5 milyon*, *bütçem 3M*\n"
+     "• Özellik: *metro yakını*, *yeni bina*, *bahçeli*\n"
+     "• Aile: *2 çocuğum var*, *annem için*\n\n"
+     "Ne arıyorsunuz?"),
+    (re.compile(r"^(cok guzel|muhtesem|muthis|vay|wow|bravo|inanilmaz|super|mukemmel|harika)$"),
+     "Teşekkürler! 😊 Size en uygun evi bulmak için kriterleri söyleyin — şehir, oda sayısı, bütçe?"),
+]
+
+
+def _is_no_intent(filters: "ChatFilters") -> bool:
+    return (
+        not filters.city and not filters.district and
+        filters.min_rooms is None and filters.max_rooms is None and
+        filters.max_price is None and filters.min_price is None and
+        not filters.keywords and not filters.context
+    )
 
 
 def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total: int) -> str:
-    if _GREETING_PAT.match(_strip(message)):
+    text_norm = _strip(message)
+
+    if _GREETING_PAT.match(text_norm):
         return (
             "Merhaba! 👋 Ben EmlakAI chatbot'uyum, size ideal evi bulmak için buradayım.\n\n"
             "Şunları anlayabilirim:\n"
@@ -521,8 +579,20 @@ def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total:
             "• Oda: *3+1*, *en az 2 oda*, *stüdyo*\n"
             "• Bütçe: *5 milyon altı*, *bütçem 3 milyon*\n"
             "• Aile: *2 çocuğum var*, *4 kişilik aile*, *annem için*\n"
-            "• Özellik: *metro yakını*, *yeni bina*, *bahçeli*, *asansörlü*\n\n"
+            "• Özellik: *metro yakını*, *otobüs yakını*, *yeni bina*, *bahçeli*\n\n"
             "Ne arıyorsunuz?"
+        )
+
+    # Chitchat: check before listing logic
+    for pattern, response in _CHITCHAT_MAP:
+        if pattern.search(text_norm):
+            return response
+
+    # No extractable listing intent → ask clarifying question
+    if _is_no_intent(filters) and not picks:
+        return (
+            "Anlıyorum 😊 Hangi şehirde, kaç oda ve bütçeniz ne kadar?\n\n"
+            "Örnek: *'Ankara'da 3+1, 5 milyon altı'* veya *'İstanbul'da metro yakını ev'*"
         )
 
     if not picks:
