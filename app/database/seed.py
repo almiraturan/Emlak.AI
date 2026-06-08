@@ -140,20 +140,31 @@ def seed_listings_if_empty(db: Session) -> None:
 
 
 def seed_demo_user_and_behavior(db: Session) -> None:
-    """Ensure the Demo User (id=1) exists and has some example behavior records."""
+    """Ensure the default user Almira (id=1) exists and has some example behavior records."""
     demo = db.query(User).filter(User.id == 1).first()
     if demo is None:
         demo = User(
             id=1,
-            name="Demo User",
+            name="Almira",
             budget_min=2_000_000.0,
             budget_max=6_000_000.0,
             preferred_rooms=3,
             prefers_quiet=False,
             prefers_central=True,
             purpose="ikamet",
+            password="12345"
         )
         db.add(demo)
+        db.commit()
+    else:
+        if demo.name != "Almira":
+            demo.name = "Almira"
+            demo.password = "12345"
+            db.commit()
+
+    if db.bind.dialect.name == "postgresql":
+        from sqlalchemy import text
+        db.execute(text("SELECT setval('users_id_seq', COALESCE((SELECT MAX(id) FROM users), 1))"))
         db.commit()
 
     existing_behaviors = (

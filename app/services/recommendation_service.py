@@ -1,10 +1,55 @@
 from typing import Dict, List
+from math import radians, cos, sin, asin, sqrt
 
 from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.models import Listing, User, UserRecommendationFeedback
 from app.services.price_analysis_service import calculate_price_analysis
+
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    if lat1 is None or lon1 is None or lat2 is None or lon2 is None:
+        return 999.0
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    c = 2 * asin(sqrt(a))
+    r = 6371  # Radius of earth in kilometers
+    return c * r
+
+
+def get_city_center(city_name: str) -> tuple[float, float]:
+    city = (city_name or "").lower()
+    if "ankara" in city:
+        return 39.9208, 32.8541  # Kızılay
+    elif "izmir" in city:
+        return 38.4189, 27.1287  # Konak
+    else:
+        return 41.0369, 28.9775  # Taksim / İstanbul
+
+
+def calculate_noise_score(listing: Listing) -> float:
+    # Base noise score
+    noise = 5.0
+    # High lifestyle score implies more POIs (shops, transit, schools) = noisier
+    if listing.lifestyle_score:
+        noise += (listing.lifestyle_score - 5.0) * 0.7
+    
+    # Keyword adjustments
+    neighborhood = (listing.neighborhood or "").lower()
+    title = (listing.title or "").lower()
+    description = (listing.description or "").lower()
+    
+    # Commercial or busy words increase noise
+    if any(w in neighborhood or w in title for w in ["merkez", "levent", "mecidiyekoy", "nisantasi", "istasyon", "metro"]):
+        noise += 2.0
+    # Quiet or residential words decrease noise
+    if any(w in neighborhood or w in title or w in description for w in ["sakin", "sessiz", "sahil", "park", "moda", "tarabya", "cengelkoy", "kuzguncuk"]):
+        noise -= 2.0
+        
+    return max(1.0, min(10.0, noise))
 
 
 def calculate_match_score(user: User, listing: Listing, db: Session) -> float:
@@ -29,12 +74,28 @@ def calculate_match_score(user: User, listing: Listing, db: Session) -> float:
         score += 5
 
     # Location preference (20 points)
-    if user.prefers_central and listing.neighborhood.lower().find('merkez') != -1:
-        score += 20
-    elif user.prefers_quiet and listing.neighborhood.lower().find('sessiz') != -1:
-        score += 20
-    else:
-        score += 10
+    loc_points = 10.0
+    if user.prefers_quiet and user.prefers_central:
+        # Evaluate both, each contributing up to 10 points
+        noise_score = calculate_noise_score(listing)
+        quiet_part = ((10.0 - noise_score) * 2.2) * 0.5
+        
+        center_lat, center_lon = get_city_center(listing.city)
+        dist = haversine_distance(listing.latitude, listing.longitude, center_lat, center_lon)
+        central_part = max(0.0, 20.0 - dist * 1.0) * 0.5
+        
+        loc_points = quiet_part + central_part
+    elif user.prefers_quiet:
+        noise_score = calculate_noise_score(listing)
+        # Scale 1.0 (quietest) to 10.0 (noisiest)
+        loc_points = (10.0 - noise_score) * 2.2
+    elif user.prefers_central:
+        center_lat, center_lon = get_city_center(listing.city)
+        dist = haversine_distance(listing.latitude, listing.longitude, center_lat, center_lon)
+        # Under 20km gets scaled
+        loc_points = max(0.0, 20.0 - dist * 1.0)
+    
+    score += min(20.0, max(0.0, loc_points))
 
     # Lifestyle score (15 points)
     if listing.lifestyle_score:

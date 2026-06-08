@@ -6,6 +6,12 @@
     <title>{% block title %}EmlakAI - AI-Powered Real Estate Intelligence{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=20260603-dashboard-v2">
+    <script>
+        // Rota koruması: Yetkisiz kullanıcıları giriş sayfasına yönlendirir
+        if (!localStorage.getItem('emlakai_user_id')) {
+            window.location.href = '/login';
+        }
+    </script>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -23,7 +29,20 @@
                 <li><a href="/analyze" class="nav-link {% if request.url.path == '/analyze' %}active{% endif %}">Analiz</a></li>
                 <li><a href="/listings" class="nav-link {% if request.url.path == '/listings' %}active{% endif %}">İlanlar</a></li>
                 <li><a href="/saved" class="nav-link {% if request.url.path == '/saved' %}active{% endif %}">Kaydedilen Evler</a></li>
+                <li><a href="/profile" class="nav-link {% if request.url.path == '/profile' %}active{% endif %}">Profilim</a></li>
             </ul>
+            <div style="display: flex; align-items: center; gap: 1.25rem;">
+                <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.05); padding: 0.5rem 0.95rem; border-radius: 12px; border: 1px solid rgba(0, 212, 170, 0.15);">
+                    <span style="font-size: 0.95rem;">👤</span>
+                    <span id="activeUserName" style="font-weight: 600; color: #fff;">-</span>
+                </div>
+                <button onclick="logoutUser()" title="Oturumu Kapat" 
+                        style="background: transparent; border: none; font-size: 1.35rem; cursor: pointer; opacity: 0.75; transition: all 0.2s; padding: 0.25rem; display: flex; align-items: center; justify-content: center;"
+                        onmouseover="this.style.opacity='1'; this.style.transform='scale(1.15)';" 
+                        onmouseout="this.style.opacity='0.75'; this.style.transform='scale(1)';">
+                    🚪
+                </button>
+            </div>
         </div>
     </nav>
 
@@ -49,6 +68,23 @@
 
     <!-- Scripts -->
     <script src="{{ url_for('static', path='/js/main.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const nameEl = document.getElementById('activeUserName');
+            if (nameEl) {
+                nameEl.textContent = localStorage.getItem('emlakai_user_name') || 'Kullanıcı';
+            }
+        });
+
+        function logoutUser() {
+            localStorage.removeItem('emlakai_user_id');
+            localStorage.removeItem('emlakai_user_name');
+            window.EmlakAI.showToast('Oturum kapatıldı.', 'info');
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 800);
+        }
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

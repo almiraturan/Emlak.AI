@@ -37,6 +37,9 @@ services:
     container_name: emlakai-backend
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/emlakai
+      - REDIS_URL=redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
@@ -53,6 +56,9 @@ services:
     command: ["python", "-m", "dramatiq", "app.services.background", "--processes", "1", "--threads", "4"]
     env_file:
       - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/emlakai
+      - REDIS_URL=redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy

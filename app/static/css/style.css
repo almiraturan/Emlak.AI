@@ -1643,3 +1643,390 @@ h1, h2, h3, h4, h5, h6 {
     .hero-main-title { font-size: 1.9rem; }
     .hero-v2         { padding: 3.5rem 1.2rem 3rem; }
 }
+
+/* ============================================================================
+   USER SELECTOR DROPDOWN & MODAL & PROFILE STYLES
+   ============================================================================ */
+
+.user-selector-container {
+    position: relative;
+    display: inline-block;
+}
+
+.user-dropdown-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(0, 212, 170, 0.05);
+    border: 1px solid rgba(0, 212, 170, 0.2);
+    border-radius: 20px;
+    color: var(--color-text);
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.user-dropdown-btn:hover {
+    background: rgba(0, 212, 170, 0.15);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 12px rgba(0, 212, 170, 0.25);
+}
+
+.user-dropdown-btn .dropdown-chevron {
+    font-size: 0.7rem;
+    color: var(--color-text-secondary);
+}
+
+.user-dropdown-menu {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: 250px;
+    background: rgba(15, 15, 25, 0.95);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(0, 212, 170, 0.25);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    z-index: 1100;
+    display: none;
+    flex-direction: column;
+    padding: 0.5rem 0;
+    animation: slideInUp 0.2s ease forwards;
+}
+
+.user-dropdown-menu.active {
+    display: flex;
+}
+
+.dropdown-header {
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--color-accent);
+    padding: 0.5rem 1rem;
+    letter-spacing: 0.5px;
+}
+
+.user-list-container {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.user-list-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.65rem 1rem;
+    background: transparent;
+    border: none;
+    width: 100%;
+    color: var(--color-text);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease;
+}
+
+.user-list-item:hover {
+    background: rgba(0, 212, 170, 0.1);
+    color: var(--color-accent);
+}
+
+.user-list-item.selected {
+    border-left: 3px solid var(--color-accent);
+    background: rgba(0, 212, 170, 0.05);
+    font-weight: 600;
+}
+
+.dropdown-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 0.5rem 0;
+}
+
+.dropdown-action-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.65rem 1rem;
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    text-align: left;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.dropdown-action-btn:hover {
+    color: var(--color-accent);
+    background: rgba(0, 212, 170, 0.05);
+}
+
+/* Modal Styling */
+.emlakai-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(5, 5, 10, 0.8);
+    backdrop-filter: blur(8px);
+    z-index: 10000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.emlakai-modal-overlay.active {
+    display: flex;
+}
+
+.emlakai-modal {
+    width: 90%;
+    max-width: 500px;
+    background: rgba(18, 18, 28, 0.98);
+    border: 1px solid rgba(0, 212, 170, 0.3);
+    border-radius: 16px;
+    box-shadow: 0 15px 40px rgba(0, 212, 170, 0.2);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    animation: slideInUp 0.3s ease;
+}
+
+.emlakai-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.emlakai-modal-header h3 {
+    margin: 0;
+    color: var(--color-accent);
+    font-size: 1.3rem;
+}
+
+.emlakai-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--color-text-secondary);
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.emlakai-modal-close:hover {
+    color: #ef4444;
+}
+
+.emlakai-modal-body {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.emlakai-modal-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.modal-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(0, 212, 170, 0.2);
+    border-radius: 10px;
+    color: var(--color-text);
+    font-family: var(--font-body);
+}
+
+.modal-input:focus {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 10px rgba(0, 212, 170, 0.15);
+}
+
+.modal-row-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.modal-checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.modal-checkbox-group input {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    accent-color: var(--color-accent);
+}
+
+/* Profile Page Layout */
+.profile-page-container {
+    display: grid;
+    grid-template-columns: 350px 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+@media (max-width: 992px) {
+    .profile-page-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+.profile-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.profile-main-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+}
+
+.profile-avatar-card {
+    padding: 2.5rem 2rem;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.avatar-large {
+    font-size: 4.5rem;
+    background: rgba(0, 212, 170, 0.1);
+    border: 2px solid rgba(0, 212, 170, 0.25);
+    width: 110px;
+    height: 110px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 20px rgba(0, 212, 170, 0.15);
+}
+
+.profile-title-name {
+    font-size: 1.8rem;
+    font-family: var(--font-title);
+    margin: 0.5rem 0 0;
+}
+
+.profile-badge {
+    background: rgba(0, 212, 170, 0.15);
+    color: var(--color-accent);
+    padding: 0.35rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.profile-info-list {
+    width: 100%;
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.profile-info-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 0.5rem;
+}
+
+.profile-info-label {
+    color: var(--color-text-secondary);
+}
+
+.profile-info-value {
+    font-weight: 600;
+}
+
+.profile-section-card {
+    padding: 2rem;
+}
+
+.profile-section-card h2 {
+    font-size: 1.4rem;
+    color: var(--color-accent);
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 300px;
+    overflow-y: auto;
+    padding-right: 0.5rem;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
+.history-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.history-badge.search { background: rgba(59, 130, 246, 0.15); color: var(--color-profile); }
+.history-badge.click { background: rgba(16, 185, 129, 0.15); color: var(--color-lifestyle); }
+.history-badge.save { background: rgba(245, 158, 11, 0.15); color: var(--color-price); }
+.history-badge.skip { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+.history-time {
+    font-size: 0.8rem;
+    color: var(--color-text-secondary);
+}
+
+.saved-listings-grid-profile {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.profile-empty-state {
+    padding: 3rem 0;
+    text-align: center;
+    color: var(--color-text-secondary);
+}
+
+.profile-empty-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+

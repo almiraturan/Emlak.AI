@@ -47,7 +47,7 @@
     <section class="analyze-inputs">
         <div class="input-group">
             <label>User</label>
-            <div id="userInfo">Demo User — ID: 1</div>
+            <div id="userInfo">Almira — ID: 1</div>
         </div>
         <div class="input-group">
             <label for="listingId">Listing ID</label>
@@ -243,11 +243,14 @@
 
 {% block extra_js %}
 <script>
-    const DEMO_USER_ID = 1;
+    const DEMO_USER_ID = localStorage.getItem('emlakai_user_id') || 1;
     let isCurrentlySaved = false;
     let currentListingId = null;
 
     document.addEventListener('DOMContentLoaded', () => {
+        const activeName = localStorage.getItem('emlakai_user_name') || 'Almira';
+        document.getElementById('userInfo').textContent = `${activeName} — ID: ${DEMO_USER_ID}`;
+
         const params = new URLSearchParams(window.location.search);
         const lid = params.get('listing_id');
         if (lid) {
@@ -257,19 +260,7 @@
     });
 
     async function trackBehavior(behaviorType, listingId, metadata) {
-        try {
-            await fetch(`/api/behavior?user_id=${DEMO_USER_ID}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    behavior_type: behaviorType,
-                    listing_id: listingId || null,
-                    metadata: metadata || null,
-                }),
-            });
-        } catch (err) {
-            console.warn('Behavior tracking failed', err);
-        }
+        return; // Stopped logging user activity history
     }
 
     async function runFullAnalysis() {

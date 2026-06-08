@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giriş Yap - EmlakAI</title>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/style.css') }}?v=20260603-dashboard-v2">
+    <style>
+        body {
+            background-color: #0a0a0f;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            font-family: 'DM Sans', sans-serif;
+            position: relative;
+            overflow-y: auto;
+            padding: 2rem 0;
+        }
+
+        /* Subtle glowing background orbs */
+        .bg-glow-1 {
+            position: absolute;
+            top: 20%;
+            left: 20%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(0, 212, 170, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+            z-index: -1;
+            pointer-events: none;
+        }
+        .bg-glow-2 {
+            position: absolute;
+            bottom: 20%;
+            right: 20%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(59, 130, 246, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .login-container {
+            width: 100%;
+            max-width: 480px;
+            padding: 0 1.5rem;
+            z-index: 10;
+        }
+
+        .login-card {
+            background: rgba(20, 20, 35, 0.65);
+            border: 1px solid rgba(0, 212, 170, 0.15);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 2.5rem 2rem;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .brand-header {
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .brand-logo {
+            font-size: 3rem;
+            display: inline-block;
+            margin-bottom: 0.5rem;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .brand-title {
+            font-family: 'Syne', sans-serif;
+            color: #00d4aa;
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0;
+            text-shadow: 0 0 20px rgba(0, 212, 170, 0.2);
+        }
+
+        .brand-subtitle {
+            color: #a0a0a0;
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        .view-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.35rem;
+            color: #fff;
+            text-align: center;
+            margin-top: 0.5rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .password-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .password-toggle-btn {
+            position: absolute;
+            right: 1rem;
+            background: none;
+            border: none;
+            color: #a0a0a0;
+            cursor: pointer;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.25rem;
+            transition: color 0.2s;
+        }
+
+        .password-toggle-btn:hover {
+            color: #00d4aa;
+        }
+
+        .toggle-view-link {
+            color: #a0a0a0;
+            font-size: 0.85rem;
+            text-align: center;
+            cursor: pointer;
+            transition: color 0.2s;
+            margin-top: 0.5rem;
+        }
+
+        .toggle-view-link span {
+            color: #00d4aa;
+            font-weight: 600;
+            text-decoration: underline;
+        }
+
+        .toggle-view-link:hover span {
+            color: #3b82f6;
+        }
+
+        .form-error {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-align: center;
+            display: none;
+        }
+
+        /* Form animation styles */
+        .fade-in {
+            animation: fadeIn 0.4s ease forwards;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .btn-primary {
+            width: 100%;
+            justify-content: center;
+            padding: 0.9rem;
+            font-size: 1rem;
+            font-weight: 700;
+            border-radius: 14px;
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.95), rgba(6, 182, 212, 0.85));
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(0, 212, 170, 0.25);
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px rgba(0, 212, 170, 0.4);
+            filter: brightness(1.05);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-glow-1"></div>
+    <div class="bg-glow-2"></div>
+
+    <div class="login-container">
+        <div class="login-card">
+            <!-- Branding Header -->
+            <div class="brand-header">
+                <span class="brand-logo">🏠</span>
+                <h1 class="brand-title">EmlakAI</h1>
+                <p class="brand-subtitle">AI Destekli Gayrimenkul Analiz Platformu</p>
+            </div>
+
+            <!-- Toast alert box (local styling) -->
+            <div id="localErrorMsg" class="form-error"></div>
+
+            <!-- Login View -->
+            <div id="loginView" class="fade-in">
+                <h2 class="view-title">Giriş Yap</h2>
+                <p style="color: #a0a0a0; font-size: 0.85rem; text-align: center; margin-bottom: 1.5rem;">Platformu kullanmak için hesabınıza giriş yapın.</p>
+
+                <form id="loginForm" onsubmit="handleLoginSubmit(event)" style="display: flex; flex-direction: column; gap: 1.2rem;">
+                    <div class="input-group">
+                        <label for="loginUsername">Kullanıcı Adı</label>
+                        <input type="text" id="loginUsername" class="modal-input" placeholder="Örn: Almira" required style="background: rgba(0,0,0,0.4); border-color: rgba(0, 212, 170, 0.15);">
+                    </div>
+
+                    <div class="input-group">
+                        <label for="loginPassword">Şifre</label>
+                        <div class="password-input-container">
+                            <input type="password" id="loginPassword" class="modal-input" placeholder="•••••" required style="background: rgba(0,0,0,0.4); border-color: rgba(0, 212, 170, 0.15); width: 100%; padding-right: 3rem;">
+                            <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility('loginPassword', this)">👁️</button>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Giriş Yap</button>
+                </form>
+
+                <div class="toggle-view-link" onclick="switchView('register')">
+                    Henüz bir hesabınız yok mu? <span>Yeni Hesap Oluştur</span>
+                </div>
+            </div>
+
+            <!-- Register View (Hidden by default) -->
+            <div id="registerView" style="display: none;" class="fade-in">
+                <h2 class="view-title">Yeni Hesap Oluştur</h2>
+                <p style="color: #a0a0a0; font-size: 0.85rem; text-align: center; margin-bottom: 1.5rem;">Kriterlerinize göre AI önerilerini almak için kayıt olun.</p>
+
+                <form id="registerForm" onsubmit="handleRegisterSubmit(event)" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="input-group">
+                        <label for="regName">İsim / Kullanıcı Adı</label>
+                        <input type="text" id="regName" class="modal-input" placeholder="Örn: Ahmet Yılmaz" required style="background: rgba(0,0,0,0.4); border-color: rgba(0, 212, 170, 0.15);">
+                    </div>
+
+                    <div class="modal-row-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div class="input-group">
+                            <label for="regBudgetMin">Min Bütçe (TL)</label>
+                            <input type="number" id="regBudgetMin" class="modal-input" value="2000000" required style="background: rgba(0,0,0,0.4); border-color: rgba(0, 212, 170, 0.15);">
+                        </div>
+                        <div class="input-group">
+                            <label for="regBudgetMax">Max Bütçe (TL)</label>
+                            <input type="number" id="regBudgetMax" class="modal-input" value="8000000" required style="background: rgba(0,0,0,0.4); border-color: rgba(0, 212, 170, 0.15);">
+                        </div>
+                    </div>
+
+                    <div class="modal-row-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div class="input-group">
+                            <label for="regRooms">Oda Sayısı</label>
+                            <input type="number" id="regRooms" class="modal-input" value="3" required style="background: rgba(0,0,0,0.4); border-color: rgba(0, 212, 170, 0.15);">
+                        </div>
+                        <div class="input-group">
+                            <label for="regPurpose">Arama Amacı</label>
+                            <select id="regPurpose" class="modal-input" style="background: rgba(0,0,0,0.4); border-color: rgba(0, 212, 170, 0.15); color: white; width: 100%;">
+                                <option value="ikamet">İkamet (Oturum)</option>
+                                <option value="yatirim">Yatırım</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="input-group" style="display: flex; flex-direction: row; gap: 1rem; margin-top: 0.25rem;">
+                        <label class="modal-checkbox-group" style="display: flex; align-items: center; gap: 0.5rem; color: #e0e0e0; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="regQuiet" checked>
+                            <span>Sessiz Muhit</span>
+                        </label>
+                        <label class="modal-checkbox-group" style="display: flex; align-items: center; gap: 0.5rem; color: #e0e0e0; font-size: 0.85rem; cursor: pointer;">
+                            <input type="checkbox" id="regCentral" checked>
+                            <span>Merkezi Konum</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn-primary" style="margin-top: 0.5rem;">Kayıt Ol ve Giriş Yap</button>
+                </form>
+
+                <div class="toggle-view-link" onclick="switchView('login')">
+                    Zaten bir hesabınız var mı? <span>Giriş Yap</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <script src="{{ url_for('static', path='/js/main.js') }}"></script>
+    <script>
+        // Redirect to / if already logged in
+        if (localStorage.getItem('emlakai_user_id')) {
+            window.location.href = '/';
+        }
+
+        function togglePasswordVisibility(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                btn.textContent = '👁️';
+            }
+        }
+
+        function switchView(view) {
+            const loginView = document.getElementById('loginView');
+            const registerView = document.getElementById('registerView');
+            const errorMsg = document.getElementById('localErrorMsg');
+            
+            errorMsg.style.display = 'none';
+
+            if (view === 'login') {
+                registerView.style.display = 'none';
+                loginView.style.display = 'block';
+            } else {
+                loginView.style.display = 'none';
+                registerView.style.display = 'block';
+            }
+        }
+
+        function showError(message) {
+            const errorMsg = document.getElementById('localErrorMsg');
+            errorMsg.textContent = message;
+            errorMsg.style.display = 'block';
+        }
+
+        async function handleLoginSubmit(event) {
+            event.preventDefault();
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value.trim();
+            const errorMsg = document.getElementById('localErrorMsg');
+
+            errorMsg.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/users/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Kullanıcı adı veya şifre hatalı!');
+                }
+
+                const user = await response.json();
+                localStorage.setItem('emlakai_user_id', user.id);
+                localStorage.setItem('emlakai_user_name', user.name);
+
+                window.EmlakAI.showToast('Giriş başarılı! Yönlendiriliyorsunuz...', 'success');
+                
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 800);
+
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+
+        async function handleRegisterSubmit(event) {
+            event.preventDefault();
+            const name = document.getElementById('regName').value.trim();
+            const budgetMin = parseFloat(document.getElementById('regBudgetMin').value);
+            const budgetMax = parseFloat(document.getElementById('regBudgetMax').value);
+            const rooms = parseInt(document.getElementById('regRooms').value);
+            const purpose = document.getElementById('regPurpose').value;
+            const quiet = document.getElementById('regQuiet').checked;
+            const central = document.getElementById('regCentral').checked;
+            const errorMsg = document.getElementById('localErrorMsg');
+
+            errorMsg.style.display = 'none';
+
+            try {
+                const response = await fetch('/api/users', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        budget_min: budgetMin,
+                        budget_max: budgetMax,
+                        preferred_rooms: rooms,
+                        prefers_quiet: quiet,
+                        prefers_central: central,
+                        purpose: purpose,
+                        password: "12345"
+                    })
+                });
+
+                if (!response.ok) {
+                    const err = await response.json();
+                    throw new Error(err.detail || 'Kullanıcı oluşturulurken bir hata oluştu.');
+                }
+
+                const user = await response.json();
+                localStorage.setItem('emlakai_user_id', user.id);
+                localStorage.setItem('emlakai_user_name', user.name);
+
+                window.EmlakAI.showToast('Hesabınız oluşturuldu ve giriş yapıldı!', 'success');
+                
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 800);
+
+            } catch (err) {
+                showError(err.message);
+            }
+        }
+    </script>
+</body>
+</html>

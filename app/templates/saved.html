@@ -80,7 +80,7 @@
 
 {% block extra_js %}
 <script>
-    const USER_ID = 1;
+    const USER_ID = localStorage.getItem('emlakai_user_id') || 1;
 
     document.addEventListener('DOMContentLoaded', loadSaved);
 

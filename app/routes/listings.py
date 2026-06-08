@@ -5,9 +5,30 @@ from sqlalchemy import asc, desc, or_
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
+from app.models import User
 from app.models.listing import Listing
 from app.schemas.listing import ListingCardResponse, ListingListResponse, ListingResponse
 from app.services.listing_service import get_listing_by_id
+from app.services.recommendation_service import calculate_match_score
+
+def canonicalize_turkish(text: str) -> str:
+    if not text:
+        return ""
+    # Replace capital Turkish letters first, then lowercase them, then replace lowercase Turkish letters
+    replacements_upper = {
+        'İ': 'i', 'I': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c'
+    }
+    replacements_lower = {
+        'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c'
+    }
+    for k, v in replacements_upper.items():
+        text = text.replace(k, v)
+    text = text.lower()
+    for k, v in replacements_lower.items():
+        text = text.replace(k, v)
+    # Remove combining dot above if any remained
+    text = text.replace('\u0307', '')
+    return text.strip()
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -24,6 +45,7 @@ def read_listings(
     min_area: float | None = Query(default=None, ge=0),
     sort_by: str = Query(default="recent"),
     search: str | None = Query(default=None),
+    user_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     if page < 1:
@@ -32,6 +54,17 @@ def read_listings(
         page_size = 10
 
     query = db.query(Listing).filter(Listing.is_active.is_(True))
+
+    user = None
+    if user_id is not None:
+        user = db.query(User).filter(User.id == user_id).first()
+
+    # Apply user's preferred location filters if not overridden by explicit search parameters
+    if not search and not district and user:
+        if user.district and user.district.strip():
+            query = query.filter(Listing.district_canonical == canonicalize_turkish(user.district))
+        elif user.province and user.province.strip():
+            query = query.filter(Listing.city_canonical == canonicalize_turkish(user.province))
 
     if search:
         s = search.strip()
@@ -69,22 +102,32 @@ def read_listings(
     if min_area is not None:
         query = query.filter(Listing.area_m2 >= min_area)
 
-    if sort_by == "price_asc":
-        query = query.order_by(asc(Listing.price))
-    elif sort_by == "price_desc":
-        query = query.order_by(desc(Listing.price))
-    elif sort_by == "lifestyle_score":
-        query = query.order_by(desc(Listing.lifestyle_score), desc(Listing.id))
+    # user is already loaded above
+
+    if user and sort_by == "personalized":
+        # Load all matching listings to sort in memory
+        all_listings = query.all()
+        # Sort by match score descending
+        all_listings.sort(key=lambda l: calculate_match_score(user, l, db), reverse=True)
+        total = len(all_listings)
+        listings = all_listings[(page - 1) * page_size : page * page_size]
     else:
-        query = query.order_by(Listing.published_at.desc().nullslast(), Listing.id.desc())
+        # Standard database sorting and pagination
+        if sort_by == "price_asc":
+            query = query.order_by(asc(Listing.price))
+        elif sort_by == "price_desc":
+            query = query.order_by(desc(Listing.price))
+        elif sort_by == "lifestyle_score":
+            query = query.order_by(desc(Listing.lifestyle_score), desc(Listing.id))
+        else:
+            query = query.order_by(Listing.published_at.desc().nullslast(), Listing.id.desc())
 
-    total = query.count()
-
-    listings = (
-        query.offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+        total = query.count()
+        listings = (
+            query.offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
 
     items = [
         ListingCardResponse(
