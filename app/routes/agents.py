@@ -3,7 +3,7 @@ import asyncio
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -51,8 +51,12 @@ def get_user_profile(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/listing/{listing_id}/lifestyle")
-def get_listing_lifestyle(listing_id: int, db: Session = Depends(get_db)):
-    """Get lifestyle score for a listing."""
+def get_listing_lifestyle(
+    listing_id: int,
+    radius_km: float = Query(default=5.0, ge=0.5, le=10.0),
+    db: Session = Depends(get_db),
+):
+    """Get lifestyle score for a listing with configurable search radius."""
     try:
         from app.models.listing import Listing
 
@@ -70,7 +74,7 @@ def get_listing_lifestyle(listing_id: int, db: Session = Depends(get_db)):
 
         lifestyle_agent = LifestyleAgent()
         result = lifestyle_agent.score_lifestyle(
-            listing.latitude, listing.longitude
+            listing.latitude, listing.longitude, radius_m=int(radius_km * 1000)
         )
         return result
     except HTTPException:

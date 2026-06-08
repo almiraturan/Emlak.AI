@@ -109,21 +109,14 @@ class LifestyleAgent(BaseAgent):
         return pois, nearest_distances_km, poi_names
 
     def score_lifestyle(
-        self, latitude: float, longitude: float
+        self, latitude: float, longitude: float, radius_m: int = 5000
     ) -> Dict:
-        """
-        Score lifestyle quality of a location using RAG.
-
-        Args:
-            latitude: Location latitude
-            longitude: Location longitude
-
-        Returns:
-            Dictionary with score, description, and POI counts
-        """
+        """Score lifestyle quality of a location using live Overpass POI data."""
+        pois: Dict[str, int] = {}
+        nearest_distances_km: Dict[str, float | None] = {}
+        poi_names: Dict[str, list[str]] = {}
         try:
             # Step 1: Retrieval - fetch POIs
-            radius_m = 5000
             pois, nearest_distances_km, poi_names = self.get_pois_nearby(
                 latitude,
                 longitude,
@@ -131,7 +124,7 @@ class LifestyleAgent(BaseAgent):
             )
 
             # Step 2: Augmented Generation - send to LLM (if available)
-            if sum(pois.values()) > 0 and self.is_llm_available():
+            if sum(pois.values()) > 0 and self.is_ollama_available():
                 # Format POI list for LLM
                 poi_text = ", ".join(
                     [f"{k}: {v}" for k, v in pois.items() if v > 0]
@@ -180,15 +173,16 @@ Places: {poi_text}"""
 
         except Exception as e:
             logger.error(f"Error scoring lifestyle: {e}")
+            # Return whatever pois we managed to collect before the error
             return {
-                "score": 5.0,
-                "description": "Error calculating lifestyle score",
-                "poi_counts": {},
-                "nearest_distances_km": {},
-                "poi_names": {},
-                "search_radius_km": 5.0,
+                "score": self._calculate_rule_based_score(pois) if pois else 5.0,
+                "description": "Kısmi veri ile hesaplandı" if pois else "Konum verisi alınamadı",
+                "poi_counts": pois,
+                "nearest_distances_km": nearest_distances_km,
+                "poi_names": poi_names,
+                "search_radius_km": round(radius_m / 1000.0, 2),
                 "transit_search_radius_km": 1.0,
-                "source": "error",
+                "source": "partial" if pois else "error",
             }
 
     def _extract_poi_names(self, elements: list[dict], poi_type: str) -> list[str]:
