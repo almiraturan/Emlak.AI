@@ -13,9 +13,14 @@ class Settings(BaseSettings):
 
     # Provider configuration
     sahibinden_search_url: str = "https://www.sahibinden.com/satilik-daire"
-    emlakjet_search_url: str = "https://www.emlakjet.com/satilik-konut/"
+    emlakjet_search_url: str = "https://www.emlakjet.com/projeler/"
+    hepsiemlak_search_url: str = "https://www.hepsiemlak.com/istanbul-satilik"
     provider_request_timeout_seconds: int = 20
     provider_max_items: int = 20
+
+    # Kaggle API credentials (for dataset import)
+    kaggle_username: str = ""
+    kaggle_key: str = ""
 
     # OpenStreetMap APIs
     overpass_url: str = "https://overpass-api.de/api/interpreter"

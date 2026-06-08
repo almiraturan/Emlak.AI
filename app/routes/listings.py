@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, desc
+from sqlalchemy import asc, desc, or_
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
@@ -86,6 +86,44 @@ def read_listings(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/listings/search")
+def search_listings(
+    q: str = Query(default="", min_length=0),
+    limit: int = Query(default=20, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    terms = [t.strip() for t in q.split() if t.strip()]
+    query = db.query(Listing).filter(Listing.is_active.is_(True))
+    for term in terms:
+        pattern = f"%{term}%"
+        query = query.filter(
+            or_(
+                Listing.title.ilike(pattern),
+                Listing.city.ilike(pattern),
+                Listing.district.ilike(pattern),
+                Listing.neighborhood.ilike(pattern),
+                Listing.room_layout_raw.ilike(pattern),
+            )
+        )
+    listings = (
+        query.order_by(desc(Listing.lifestyle_score).nullslast(), desc(Listing.id))
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id": l.id,
+            "title": l.title,
+            "price": float(l.price) if l.price else None,
+            "city": l.city,
+            "district": l.district,
+            "room_layout_raw": l.room_layout_raw,
+            "lifestyle_score": l.lifestyle_score,
+        }
+        for l in listings
+    ]
 
 
 @router.get("/listings/{listing_id}", response_model=ListingResponse)

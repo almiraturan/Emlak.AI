@@ -9,27 +9,33 @@
         <p>Bir kullanıcı ve İlan kombinasyonunun kapsamlı analizi</p>
     </section>
 
-    <section class="analyze-inputs">
+    <section class="analyze-inputs glass">
         <div class="input-group">
-            <label>User</label>
-            <div id="userInfo">Demo User — ID: 1</div>
+            <label>Kullanıcı</label>
+            <input type="text" value="Almira" readonly style="opacity:0.7;cursor:default;">
         </div>
-        <div class="input-group">
-            <label for="listingId">Listing ID</label>
-            <input type="number" id="listingId" placeholder="1" min="1" value="1">
+        <div class="input-group listing-search-group" style="position:relative;">
+            <label for="listingSearch">İlan Seç</label>
+            <input
+                type="text"
+                id="listingSearch"
+                placeholder="İlan ara... (örn: ankara 3+1, beşiktaş)"
+                autocomplete="off"
+            >
+            <input type="hidden" id="selectedListingId">
+            <div id="listingDropdown" class="listing-dropdown" style="display:none;"></div>
         </div>
         <button class="btn btn-primary" onclick="runFullAnalysis()">
             <span id="analyzeButtonText">📊 Tam Analiz Yap</span>
         </button>
     </section>
 
+    <!-- Selected listing preview -->
+    <div id="selectedListingPreview" class="selected-listing-preview" style="display:none;"></div>
+
     <!-- Loading States -->
     <div id="loadingContainer" class="loading-container" style="display:none;">
         <div class="engines-loading">
-            <div class="engine-loading" id="profileLoading">
-                <div class="loading-spinner"></div>
-                <span>Profile Engine</span>
-            </div>
             <div class="engine-loading" id="lifestyleLoading">
                 <div class="loading-spinner"></div>
                 <span>Lifestyle Engine</span>
@@ -52,49 +58,6 @@
 
     <!-- Results -->
     <div id="resultsContainer" class="results-container" style="display:none;">
-        <!-- Profile Result -->
-        <div class="result-card glass result-profile">
-            <div class="result-header">
-                <h2>Kullanıcı Profili</h2>
-                <span class="result-badge profile">Profile</span>
-            </div>
-            <div class="result-body">
-                <div class="profile-cluster">
-                    <div class="cluster-label" id="clusterLabel">-</div>
-                    <div class="cluster-description" id="clusterDescription">-</div>
-                </div>
-                <div class="profile-metadata">
-                    <div class="metadata-item">
-                        <span class="metadata-label">Toplam Etkileşim:</span>
-                        <span class="metadata-value" id="totalEvents">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Tıklama:</span>
-                        <span class="metadata-value" id="clickCount">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Kaydetme:</span>
-                        <span class="metadata-value" id="saveCount">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Atlama:</span>
-                        <span class="metadata-value" id="skipCount">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Ortalama Kaydedilen Fiyat:</span>
-                        <span class="metadata-value" id="avgSavedPrice">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Atla Oranı:</span>
-                        <span class="metadata-value" id="skipRate">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Kaydet Oranı:</span>
-                        <span class="metadata-value" id="saveRate">-</span>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Lifestyle Result -->
         <div class="result-card glass result-lifestyle">
@@ -109,7 +72,7 @@
                         <div class="score-max">/10</div>
                     </div>
                     <div class="lifestyle-description" id="lifestyleDescription">-</div>
-                    <div class="lifestyle-meta" id="lifestyleMeta">Arama yaricapi: -</div>
+                    <div class="lifestyle-meta" id="lifestyleMeta">Arama yarıçapı: -</div>
                 </div>
                 <div class="poi-counts">
                     <div class="poi-item" id="poiSchool">
@@ -194,21 +157,143 @@
 
     <div id="errorContainer" class="error-container" style="display:none;"></div>
 </div>
-
 {% endblock %}
 
 {% block extra_js %}
+<style>
+.listing-search-group { flex: 2; }
+.listing-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #1a1a2e;
+    border: 1px solid #00d4aa44;
+    border-radius: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+    z-index: 999;
+    margin-top: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.listing-dropdown-item {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid #ffffff0d;
+    transition: background 0.15s;
+}
+.listing-dropdown-item:last-child { border-bottom: none; }
+.listing-dropdown-item:hover, .listing-dropdown-item.active { background: #00d4aa1a; }
+.listing-dropdown-item .item-title { font-size: 0.88rem; color: #e0e0e0; }
+.listing-dropdown-item .item-meta { font-size: 0.76rem; color: #888; margin-top: 2px; }
+.listing-dropdown-empty { padding: 12px 14px; color: #888; font-size: 0.85rem; }
+.selected-listing-preview {
+    background: #0d1b2a;
+    border: 1px solid #00d4aa33;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-top: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.selected-listing-preview .preview-title { font-size: 1rem; color: #e0e0e0; }
+.selected-listing-preview .preview-meta { font-size: 0.82rem; color: #00d4aa; margin-top: 3px; }
+</style>
 <script>
     const DEMO_USER_ID = 1;
+    let selectedListingId = null;
+    let searchDebounce = null;
 
     document.addEventListener('DOMContentLoaded', () => {
         const params = new URLSearchParams(window.location.search);
         const lid = params.get('listing_id');
         if (lid) {
-            document.getElementById('listingId').value = lid;
+            selectedListingId = parseInt(lid);
+            document.getElementById('selectedListingId').value = lid;
+            fetchAndShowListingPreview(selectedListingId);
             runFullAnalysis();
         }
+
+        const searchInput = document.getElementById('listingSearch');
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchDebounce);
+            searchDebounce = setTimeout(() => doSearch(searchInput.value), 280);
+        });
+
+        searchInput.addEventListener('focus', () => {
+            if (searchInput.value.trim().length >= 0) doSearch(searchInput.value);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.listing-search-group')) {
+                document.getElementById('listingDropdown').style.display = 'none';
+            }
+        });
     });
+
+    async function doSearch(query) {
+        const dropdown = document.getElementById('listingDropdown');
+        const q = query.trim();
+        try {
+            const url = `/api/listings/search?q=${encodeURIComponent(q)}&limit=20`;
+            const resp = await fetch(url);
+            const items = await resp.json();
+            renderDropdown(items);
+        } catch (e) {
+            dropdown.style.display = 'none';
+        }
+    }
+
+    function renderDropdown(items) {
+        const dropdown = document.getElementById('listingDropdown');
+        dropdown.innerHTML = '';
+        if (!items || items.length === 0) {
+            dropdown.innerHTML = '<div class="listing-dropdown-empty">Arama sonucu bulunamadı</div>';
+            dropdown.style.display = 'block';
+            return;
+        }
+        items.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'listing-dropdown-item';
+            const priceStr = item.price ? `₺${Math.round(item.price).toLocaleString('tr-TR')}` : '';
+            const metaParts = [item.district, item.city, item.room_layout_raw, priceStr].filter(Boolean);
+            div.innerHTML = `
+                <div class="item-title">${item.title || 'İlan #' + item.id}</div>
+                <div class="item-meta">${metaParts.join(' · ')}</div>
+            `;
+            div.addEventListener('click', () => selectListing(item));
+            dropdown.appendChild(div);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    function selectListing(item) {
+        selectedListingId = item.id;
+        document.getElementById('selectedListingId').value = item.id;
+        document.getElementById('listingSearch').value = item.title || 'İlan #' + item.id;
+        document.getElementById('listingDropdown').style.display = 'none';
+
+        const priceStr = item.price ? `₺${Math.round(item.price).toLocaleString('tr-TR')}` : '';
+        const metaParts = [item.district, item.city, item.room_layout_raw, priceStr].filter(Boolean);
+        const preview = document.getElementById('selectedListingPreview');
+        preview.innerHTML = `
+            <div>
+                <div class="preview-title">${item.title || 'İlan #' + item.id}</div>
+                <div class="preview-meta">${metaParts.join(' · ')}</div>
+            </div>
+        `;
+        preview.style.display = 'flex';
+    }
+
+    async function fetchAndShowListingPreview(listingId) {
+        try {
+            const resp = await fetch(`/api/listings/${listingId}`);
+            if (!resp.ok) return;
+            const item = await resp.json();
+            selectListing({ id: item.id, title: item.title, price: item.price, district: item.district, city: item.city, room_layout_raw: item.room_layout_raw });
+        } catch (e) { /* ignore */ }
+    }
 
     async function trackBehavior(behaviorType, listingId, metadata) {
         try {
@@ -228,19 +313,17 @@
 
     async function runFullAnalysis() {
         const userId = DEMO_USER_ID;
-        const listingId = parseInt(document.getElementById('listingId').value);
+        const listingId = selectedListingId || parseInt(document.getElementById('selectedListingId').value);
 
         if (!listingId) {
-            showToast('Lütfen Listing ID girin', 'error');
+            showToast('Lütfen bir ilan seçin', 'error');
             return;
         }
 
-        // Show loading
         document.getElementById('loadingContainer').style.display = 'block';
         document.getElementById('resultsContainer').style.display = 'none';
         document.getElementById('errorContainer').style.display = 'none';
 
-        // Record this analysis as a click — feeds the user profile.
         trackBehavior('click', listingId);
 
         try {
@@ -252,10 +335,7 @@
                 return;
             }
 
-            // Simulate loading progression
             await simulateLoadingProgress();
-
-            // Display results
             displayResults(data);
 
             document.getElementById('loadingContainer').style.display = 'none';
@@ -267,15 +347,16 @@
 
     async function simulateLoadingProgress() {
         return new Promise(resolve => {
-            const engines = ['profileLoading', 'lifestyleLoading', 'priceLoading', 'comparisonLoading', 'recommendationLoading'];
+            const engines = ['lifestyleLoading', 'priceLoading', 'comparisonLoading', 'recommendationLoading'];
             let current = 0;
-
             const interval = setInterval(() => {
                 if (current < engines.length) {
                     const element = document.getElementById(engines[current]);
-                    const spinner = element.querySelector('.loading-spinner');
-                    spinner.style.borderTopColor = '#00d4aa';
-                    element.classList.add('completed');
+                    if (element) {
+                        const spinner = element.querySelector('.loading-spinner');
+                        if (spinner) spinner.style.borderTopColor = '#00d4aa';
+                        element.classList.add('completed');
+                    }
                     current++;
                 } else {
                     clearInterval(interval);
@@ -286,29 +367,11 @@
     }
 
     function displayResults(data) {
-        // Profile
-        if (data.profile) {
-            document.getElementById('clusterLabel').textContent = 
-                (data.profile.cluster_label || 'Unknown').toUpperCase();
-            document.getElementById('clusterDescription').textContent = 
-                data.profile.description || '-';
-            const meta = data.profile.metadata || {};
-            const setText = (id, v) => { document.getElementById(id).textContent = v; };
-            setText('totalEvents', meta.total_events ?? 0);
-            setText('clickCount', meta.click_count ?? 0);
-            setText('saveCount', meta.save_count ?? 0);
-            setText('skipCount', meta.skip_count ?? 0);
-            setText('avgSavedPrice',
-                meta.avg_saved_price ? `₺${Math.round(meta.avg_saved_price).toLocaleString('tr-TR')}` : '₺0');
-            setText('skipRate', `${((meta.skip_rate ?? 0) * 100).toFixed(1)}%`);
-            setText('saveRate', `${((meta.save_rate ?? 0) * 100).toFixed(1)}%`);
-        }
-
         // Lifestyle
         if (data.lifestyle) {
             const score = Math.round(data.lifestyle.score);
             document.getElementById('lifestyleScore').textContent = score;
-            document.getElementById('lifestyleDescription').textContent = 
+            document.getElementById('lifestyleDescription').textContent =
                 data.lifestyle.description || '-';
             const pois = data.lifestyle.poi_counts || {};
             const distances = data.lifestyle.nearest_distances_km || {};
@@ -317,30 +380,26 @@
             const transitRadiusKm = data.lifestyle.transit_search_radius_km ?? 1;
 
             const formatDistance = (value) => {
-                if (value === null || value === undefined) {
-                    return '-';
-                }
+                if (value === null || value === undefined) return 'Bulunamadı';
                 return `${Number(value).toFixed(2)} km`;
             };
 
-            document.getElementById('schoolCount').textContent = pois.school || 0;
-            document.getElementById('hospitalCount').textContent = pois.hospital || 0;
-            document.getElementById('transitCount').textContent = (pois.bus || 0) + (pois.subway || 0);
-            document.getElementById('parkCount').textContent = pois.park || 0;
+            document.getElementById('schoolCount').textContent = pois.school ?? 0;
+            document.getElementById('hospitalCount').textContent = pois.hospital ?? 0;
+            document.getElementById('transitCount').textContent = (pois.bus ?? 0) + (pois.subway ?? 0);
+            document.getElementById('parkCount').textContent = pois.park ?? 0;
 
-            document.getElementById('schoolDistance').textContent = `En yakin: ${formatDistance(distances.school)}`;
-            document.getElementById('hospitalDistance').textContent = `En yakin: ${formatDistance(distances.hospital)}`;
+            document.getElementById('schoolDistance').textContent = `En yakın: ${formatDistance(distances.school)}`;
+            document.getElementById('hospitalDistance').textContent = `En yakın: ${formatDistance(distances.hospital)}`;
             const transitNearest = [distances.bus, distances.subway]
-                .filter((v) => v !== null && v !== undefined)
+                .filter(v => v !== null && v !== undefined)
                 .reduce((min, v) => min === null ? v : Math.min(min, v), null);
-            document.getElementById('transitDistance').textContent = `En yakin: ${formatDistance(transitNearest)}`;
-            document.getElementById('parkDistance').textContent = `En yakin: ${formatDistance(distances.park)}`;
+            document.getElementById('transitDistance').textContent = `En yakın: ${formatDistance(transitNearest)}`;
+            document.getElementById('parkDistance').textContent = `En yakın: ${formatDistance(distances.park)}`;
 
             const formatNames = (items) => {
-                if (!Array.isArray(items) || items.length === 0) {
-                    return '-';
-                }
-                return items.join(', ');
+                if (!Array.isArray(items) || items.length === 0) return 'Yakında bulunamadı';
+                return items.slice(0, 5).join(', ') + (items.length > 5 ? ` +${items.length - 5} daha` : '');
             };
 
             const transitNames = [...new Set([...(names.bus || []), ...(names.subway || [])])];
@@ -351,8 +410,8 @@
 
             document.getElementById('lifestyleMeta').textContent =
                 radiusKm === null
-                    ? 'Arama yaricapi: -'
-                    : `Arama yaricapi: ${Number(radiusKm).toFixed(1)} km (Toplu tasima: ${Number(transitRadiusKm).toFixed(1)} km)`;
+                    ? 'Arama yarıçapı: -'
+                    : `Arama yarıçapı: ${Number(radiusKm).toFixed(1)} km (Toplu taşıma: ${Number(transitRadiusKm).toFixed(1)} km)`;
         }
 
         // Price
@@ -361,23 +420,18 @@
             const actual = Math.round(data.price.actual_price);
             document.getElementById('predictedPrice').textContent = `₺${predicted.toLocaleString('tr-TR')}`;
             document.getElementById('actualPrice').textContent = `₺${actual.toLocaleString('tr-TR')}`;
-            
+
             const verdict = data.price.verdict || 'fair';
             let verdictText = 'Adil Fiyat';
             let verdictClass = 'fair';
-            if (verdict === 'overpriced') {
-                verdictText = 'Pahalı';
-                verdictClass = 'overpriced';
-            } else if (verdict === 'underpriced') {
-                verdictText = 'Ucuz';
-                verdictClass = 'underpriced';
-            }
-            
+            if (verdict === 'overpriced') { verdictText = 'Pahalı'; verdictClass = 'overpriced'; }
+            else if (verdict === 'underpriced') { verdictText = 'Ucuz'; verdictClass = 'underpriced'; }
+
             document.getElementById('priceVerdict').textContent = verdictText;
             document.getElementById('priceVerdict').className = `verdict-badge ${verdictClass}`;
-            
+
             const diff = data.price.difference_pct;
-            document.getElementById('priceDifferenceText').textContent = 
+            document.getElementById('priceDifferenceText').textContent =
                 `${diff > 0 ? '+' : ''}${diff.toFixed(1)}% ${diff > 0 ? 'daha pahalı' : 'daha ucuz'}`;
         }
 
@@ -387,14 +441,14 @@
             if (topRecommendations.length > 0) {
                 const score = Math.round(topRecommendations[0].match_score * 10);
                 document.getElementById('matchPercentage').textContent = `%${score}`;
-                document.getElementById('matchDescription').textContent = 
+                document.getElementById('matchDescription').textContent =
                     topRecommendations[0].description || 'Tavsiye edilir';
             }
         }
 
         // Duration
         if (data.total_duration_ms) {
-            document.getElementById('analysisDuration').textContent = 
+            document.getElementById('analysisDuration').textContent =
                 Math.round(data.total_duration_ms);
         }
     }
@@ -402,7 +456,7 @@
     function showError(message) {
         document.getElementById('loadingContainer').style.display = 'none';
         document.getElementById('errorContainer').style.display = 'block';
-        document.getElementById('errorContainer').innerHTML = 
+        document.getElementById('errorContainer').innerHTML =
             `<div class="error-message">❌ Hata: ${message}</div>`;
     }
 </script>

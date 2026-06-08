@@ -35,105 +35,76 @@ class LifestyleAgent(BaseAgent):
         """Initialize the agent."""
         super().__init__()
 
+    # Maps OSM tags → our internal POI category
+    _TAG_CATEGORY_MAP = [
+        (("amenity", "school"),      "school"),
+        (("amenity", "hospital"),    "hospital"),
+        (("highway", "bus_stop"),    "bus"),
+        (("railway", "subway_entrance"), "subway"),
+        (("leisure", "park"),        "park"),
+        (("shop", "supermarket"),    "supermarket"),
+        (("amenity", "restaurant"),  "restaurant"),
+    ]
+
     def get_pois_nearby(
         self, latitude: float, longitude: float, radius_m: int = 1000
     ) -> tuple[Dict[str, int], Dict[str, float | None], Dict[str, list[str]]]:
-        """
-        Fetch POIs within radius using Overpass API.
-
-        Args:
-            latitude: Location latitude
-            longitude: Location longitude
-            radius_m: Search radius in meters (default 1km)
-
-        Returns:
-            Tuple: (POI counts by type, nearest distance in km by type, POI names by type)
-        """
-        pois = {
-            "school": 0,
-            "hospital": 0,
-            "bus": 0,
-            "subway": 0,
-            "park": 0,
-            "supermarket": 0,
-            "restaurant": 0,
-        }
-        nearest_distances_km: Dict[str, float | None] = {
-            "school": None,
-            "hospital": None,
-            "bus": None,
-            "subway": None,
-            "park": None,
-            "supermarket": None,
-            "restaurant": None,
-        }
-        poi_names: Dict[str, list[str]] = {
-            "school": [],
-            "hospital": [],
-            "bus": [],
-            "subway": [],
-            "park": [],
-            "supermarket": [],
-            "restaurant": [],
-        }
+        """Fetch POIs with a single batched Overpass query (avoids per-type rate-limiting)."""
+        pois: Dict[str, int] = {k: 0 for _, k in self._TAG_CATEGORY_MAP}
+        nearest_distances_km: Dict[str, float | None] = {k: None for _, k in self._TAG_CATEGORY_MAP}
+        poi_names: Dict[str, list[str]] = {k: [] for _, k in self._TAG_CATEGORY_MAP}
 
         if latitude is None or longitude is None:
             return pois, nearest_distances_km, poi_names
 
+        transit_r = 1000  # bus/subway use tighter radius
+
+        overpass_query = (
+            "[out:json][timeout:60];\n"
+            "(\n"
+            f'  nwr["amenity"="school"](around:{radius_m},{latitude},{longitude});\n'
+            f'  nwr["amenity"="hospital"](around:{radius_m},{latitude},{longitude});\n'
+            f'  nwr["highway"="bus_stop"](around:{transit_r},{latitude},{longitude});\n'
+            f'  nwr["railway"="subway_entrance"](around:{transit_r},{latitude},{longitude});\n'
+            f'  nwr["leisure"="park"](around:{radius_m},{latitude},{longitude});\n'
+            f'  nwr["shop"="supermarket"](around:{radius_m},{latitude},{longitude});\n'
+            f'  nwr["amenity"="restaurant"](around:{radius_m},{latitude},{longitude});\n'
+            ");\n"
+            "out center tags qt;"
+        )
+
         try:
-            category_radius_m = {
-                "school": radius_m,
-                "hospital": radius_m,
-                "bus": 1000,
-                "subway": 1000,
-                "park": radius_m,
-                "supermarket": radius_m,
-                "restaurant": radius_m,
-            }
+            response = httpx.post(
+                OVERPASS_ENDPOINT,
+                data={"data": overpass_query},
+                headers=OVERPASS_HEADERS,
+                timeout=60,
+            )
 
-            queries = {
-                "school": '"amenity"="school"',
-                "hospital": '"amenity"="hospital"',
-                "bus": '"highway"="bus_stop"',
-                "subway": '"railway"="subway_entrance"',
-                "park": '"leisure"="park"',
-                "supermarket": '"shop"="supermarket"',
-                "restaurant": '"amenity"="restaurant"',
-            }
+            if response.status_code != 200:
+                logger.warning("Overpass batch query failed: %s", response.status_code)
+                return pois, nearest_distances_km, poi_names
 
-            for poi_type, overpass_filter in queries.items():
-                category_radius = category_radius_m.get(poi_type, radius_m)
-                overpass_query = (
-                    "[out:json][timeout:25];"
-                    f"(nwr[{overpass_filter}](around:{category_radius},{latitude},{longitude}););"
-                    "out center qt;"
-                )
-                response = httpx.post(
-                    OVERPASS_ENDPOINT,
-                    data={"data": overpass_query},
-                    headers=OVERPASS_HEADERS,
-                    timeout=OVERPASS_TIMEOUT,
-                )
+            elements = response.json().get("elements", [])
 
-                if response.status_code == 200:
-                    data = response.json()
-                    elements = data.get("elements", [])
-                    pois[poi_type] = len(elements)
-                    nearest_distances_km[poi_type] = self._nearest_distance_km(
-                        latitude,
-                        longitude,
-                        elements,
-                    )
-                    poi_names[poi_type] = self._extract_poi_names(elements, poi_type)
-                else:
-                    logger.warning(
-                        f"Overpass query failed for {poi_type}: {response.status_code}"
-                    )
+            # Categorize each element by its OSM tags
+            buckets: Dict[str, list] = {k: [] for _, k in self._TAG_CATEGORY_MAP}
+            for el in elements:
+                tags = el.get("tags") or {}
+                for (tag_key, tag_val), category in self._TAG_CATEGORY_MAP:
+                    if tags.get(tag_key) == tag_val:
+                        buckets[category].append(el)
+                        break  # assign to first matching category only
+
+            for category, els in buckets.items():
+                pois[category] = len(els)
+                nearest_distances_km[category] = self._nearest_distance_km(latitude, longitude, els)
+                poi_names[category] = self._extract_poi_names(els, category)
 
         except httpx.TimeoutException:
-            logger.warning("Overpass API timeout, continuing with empty POI list")
+            logger.warning("Overpass API timeout")
         except Exception as e:
-            logger.error(f"Error fetching POIs: {e}")
+            logger.error("Error fetching POIs: %s", e)
 
         return pois, nearest_distances_km, poi_names
 

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from app.providers.base import ListingProvider
 from app.providers.emlakjet import EmlakjetProvider
+from app.providers.hepsiemlak import HepsiemlakProvider
 from app.providers.sahibinden import SahibindenProvider
 
 
 _PROVIDERS: dict[str, ListingProvider] = {
     "emlakjet": EmlakjetProvider(),
+    "hepsiemlak": HepsiemlakProvider(),
     "sahibinden": SahibindenProvider(),
 }
 

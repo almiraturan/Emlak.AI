@@ -12,6 +12,34 @@ from app.services.ingestion import ingest_listings, ingest_provider_listings
 router = APIRouter(prefix="/ingestion", tags=["ingestion"])
 
 
+@router.post("/import-kaggle-istanbul", response_model=IngestionSyncResponse)
+def import_kaggle_istanbul(
+    count: Annotated[int, Query(description="Kaç ilan içe aktarılsın (max 200)", ge=1, le=200)] = 50,
+    db: Session = Depends(get_db),
+) -> IngestionSyncResponse:
+    """Kaggle 'Istanbul Apartment Prices 2026' veri setinden İstanbul ilanları içe aktarır."""
+    try:
+        from app.services.kaggle_importer import fetch_istanbul_listings
+        from app.schemas.ingestion import IncomingListingPayload
+
+        raw_rows = fetch_istanbul_listings(target_count=count)
+        if not raw_rows:
+            raise HTTPException(status_code=502, detail="Kaggle veri setinden hiç ilan alınamadı.")
+
+        items = [IncomingListingPayload(**row) for row in raw_rows]
+        return ingest_listings(
+            db,
+            incoming=items,
+            fallback_source="kaggle_istanbul_2026",
+            source_id_prefix="KAGGLE",
+            full_sync=False,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Kaggle import hatası: {exc}") from exc
+
+
 @router.post("/demo-sync", response_model=IngestionSyncResponse)
 def run_demo_ingestion_sync(
     provider_name: Annotated[
