@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.models import User
 from app.models.listing import Listing
-from app.schemas.listing import ListingCardResponse, ListingListResponse, ListingResponse
+from app.schemas.listing import ListingCardResponse, ListingListResponse, ListingResponse, ListingSelectorResponse
 from app.services.listing_service import get_listing_by_id
 from app.services.recommendation_service import calculate_match_score
 
@@ -152,6 +152,13 @@ def read_listings(
         page=page,
         page_size=page_size,
     )
+
+
+@router.get("/listings/selector", response_model=list[ListingSelectorResponse])
+def get_listings_selector(db: Session = Depends(get_db)):
+    """Get all active listings for selection dropdown."""
+    listings = db.query(Listing).filter(Listing.is_active.is_(True)).order_by(Listing.title.asc()).all()
+    return [{"id": l.id, "title": l.title} for l in listings]
 
 
 @router.get("/listings/{listing_id}", response_model=ListingResponse)

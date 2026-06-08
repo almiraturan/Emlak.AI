@@ -10,9 +10,9 @@
         align-items: center;
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.05);
-        border-radius: 10px;
-        padding: 0.65rem 0.85rem;
-        color: #e0e0e0;
+        border-radius: var(--radius-sm);
+        padding: 0.7rem 0.95rem;
+        color: var(--text-dim);
         cursor: pointer;
         font-size: 0.85rem;
         transition: all 0.2s;
@@ -20,34 +20,20 @@
         width: 100%;
     }
     .switch-account-item:hover {
-        background: rgba(0, 212, 170, 0.08);
-        border-color: rgba(0, 212, 170, 0.3);
+        background: var(--teal-glow);
+        border-color: rgba(13, 148, 136, 0.25);
+        color: var(--text);
         transform: translateX(3px);
     }
     .switch-account-item.active {
-        background: rgba(0, 212, 170, 0.12);
-        border-color: rgba(0, 212, 170, 0.5);
+        background: rgba(13, 148, 136, 0.1);
+        border-color: rgba(13, 148, 136, 0.35);
+        color: var(--text);
         font-weight: 600;
-    }
-    .emlakai-modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(5, 5, 10, 0.85);
-        backdrop-filter: blur(8px);
-        z-index: 10000;
-        display: none;
-        align-items: center;
-        justify-content: center;
-    }
-    .emlakai-modal-overlay.active {
-        display: flex;
     }
 </style>
 <div class="analyze-page">
-    <div class="analyze-header">
+    <div class="page-hero">
         <h1>Kullanıcı Profili</h1>
         <p>Arama kriterlerinizi düzenleyin, AI çıkarımlarınızı inceleyin ve kaydedilen evlerinizi yönetin.</p>
     </div>
@@ -59,13 +45,6 @@
                 <div class="avatar-large">👤</div>
                 <h2 class="profile-title-name" id="profileUserName">Yükleniyor...</h2>
                 <span class="profile-badge">Aktif Profil</span>
-
-                <div class="profile-info-list">
-                    <div class="profile-info-item">
-                        <span class="profile-info-label">Kullanıcı ID:</span>
-                        <span class="profile-info-value" id="profileUserId">-</span>
-                    </div>
-                </div>
 
                 <button onclick="logoutUser()" class="btn btn-secondary btn-small" style="margin-top: 1.5rem; border-color: rgba(239, 68, 68, 0.4); color: #ef4444; background: rgba(239, 68, 68, 0.05); justify-content: center; width: 100%;">
                     🚪 Oturumu Kapat
@@ -140,7 +119,7 @@
                         <button type="submit" class="btn btn-primary btn-small" style="flex: 1; justify-content: center; min-width: 120px; margin-top: 0;">
                             💾 Tercihleri Kaydet
                         </button>
-                        <button type="button" onclick="showResetPreferencesModal()" class="btn btn-secondary btn-small" style="flex: 1; justify-content: center; min-width: 120px; border-color: rgba(239, 68, 68, 0.4); color: #ef4444; background: rgba(239, 68, 68, 0.05); margin-top: 0;">
+                        <button type="button" onclick="showResetPreferencesModal()" class="btn btn-outline-red btn-small" style="flex: 1; justify-content: center; min-width: 120px; margin-top: 0;">
                             🔄 Sıfırla
                         </button>
                     </div>
@@ -194,20 +173,18 @@
             </section>
 
             <!-- Reset Preferences Confirmation Modal -->
-            <div id="resetPrefModalOverlay" class="emlakai-modal-overlay">
-                <div class="emlakai-modal" style="max-width: 420px; padding: 2rem; background: #0a0a0f; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 16px; box-shadow: 0 0 30px rgba(239, 68, 68, 0.25);">
-                    <div class="emlakai-modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-                        <h3 style="font-family: var(--font-title); color: #ef4444; font-size: 1.4rem; margin: 0;">Tercihleri Sıfırla</h3>
-                        <button class="emlakai-modal-close" onclick="closeResetPreferencesModal()" style="background: none; border: none; color: #a0a0a0; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            <div id="resetPrefModalOverlay" class="confirm-modal-overlay hidden">
+                <div class="confirm-modal-box" style="border-color: rgba(239, 68, 68, 0.3); box-shadow: 0 0 32px rgba(239, 68, 68, 0.15);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem; margin-bottom: 0.5rem;">
+                        <h3 style="font-family: var(--font-title); color: #ef4444; font-size: 1.3rem; margin: 0;">Tercihleri Sıfırla</h3>
+                        <button onclick="closeResetPreferencesModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">&times;</button>
                     </div>
-                    <div class="emlakai-modal-body" style="margin-bottom: 1.5rem;">
-                        <p style="color: #e0e0e0; font-size: 0.95rem; line-height: 1.6; margin: 0;">
-                            Tüm tercihleriniz varsayılan değerlere sıfırlanacak. Devam etmek istiyor musunuz?
-                        </p>
-                    </div>
-                    <div class="emlakai-modal-footer" style="display: flex; gap: 0.75rem; justify-content: flex-end; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1rem;">
-                        <button class="btn btn-secondary btn-small" onclick="closeResetPreferencesModal()" style="padding: 0.6rem 1.25rem;">İptal</button>
-                        <button class="btn btn-danger btn-small" onclick="confirmResetPreferences()" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; font-weight: 700; padding: 0.6rem 1.25rem; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.25);">Evet, Sıfırla</button>
+                    <p style="color: var(--text-dim); font-size: 0.9rem; line-height: 1.6; margin: 0;">
+                        Tüm tercihleriniz varsayılan değerlere sıfırlanacak. Devam etmek istiyor musunuz?
+                    </p>
+                    <div class="confirm-modal-actions" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1rem;">
+                        <button class="btn btn-secondary btn-small" onclick="closeResetPreferencesModal()">İptal</button>
+                        <button class="btn btn-small" onclick="confirmResetPreferences()" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; font-weight: 700; border-radius: var(--radius-sm); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);">Evet, Sıfırla</button>
                     </div>
                 </div>
             </div>
@@ -359,7 +336,6 @@
             });
 
             document.getElementById('profileUserName').textContent = user.name;
-            document.getElementById('profileUserId').textContent = user.id;
 
             // Form inputs
             document.getElementById('prefName').value = user.name;
@@ -484,7 +460,7 @@
                             📍 ${listing.district} &nbsp;|&nbsp; 📐 ${listing.area_m2} m² &nbsp;|&nbsp; 🛏️ ${listing.room_count_total} Oda
                         </div>
                     </div>
-                    <button class="btn btn-secondary btn-small" onclick="unsaveListing(${listing.id})" style="border-color: rgba(239, 68, 68, 0.3); color: #ef4444; margin-top: 0.5rem; justify-content: center; width: 100%;">
+                    <button class="btn btn-outline-red btn-small" onclick="unsaveListing(${listing.id})" style="margin-top: 0.5rem; justify-content: center; width: 100%;">
                         ❌ Favorilerden Çıkar
                     </button>
                 `;
@@ -508,11 +484,11 @@
     }
 
     function showResetPreferencesModal() {
-        document.getElementById('resetPrefModalOverlay').classList.add('active');
+        document.getElementById('resetPrefModalOverlay').classList.remove('hidden');
     }
 
     function closeResetPreferencesModal() {
-        document.getElementById('resetPrefModalOverlay').classList.remove('active');
+        document.getElementById('resetPrefModalOverlay').classList.add('hidden');
     }
 
     async function confirmResetPreferences() {

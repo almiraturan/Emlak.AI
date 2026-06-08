@@ -4,76 +4,49 @@
 
 {% block content %}
 <div class="listings-page">
-    <section class="listings-header">
+    <section class="page-hero">
         <h1>Kaydedilen Evler</h1>
-        <p>Beğendiğin ilanlar burada toplanır. Listeden çıkarmak için kart üzerindeki kalbi tıkla.</p>
+        <p>Beğendiğiniz ilanlar burada toplanır. Listeden çıkarmak veya analiz etmek için ilgili butonları kullanın.</p>
     </section>
 
     <div id="savedGrid" class="listings-grid">
         <div class="loading-spinner-container">
             <div class="loading-spinner"></div>
-            <p>Yükleniyor...</p>
+            <p style="margin-top: 0.75rem; color: var(--text-muted); font-size: 0.9rem;">Yükleniyor...</p>
         </div>
     </div>
 
-    <div id="emptyState" class="no-results" style="display:none;">
-        <p>Henüz kaydedilmiş ev yok. <a href="/listings" style="color:#93c5fd;">İlanlara göz at</a> ve kalp simgesine bas.</p>
+    <div id="emptyState" class="no-results glass" style="display:none; text-align: center; padding: 3rem 2rem;">
+        <p style="color: var(--text-muted); font-size: 1.1rem; margin-bottom: 1.25rem;">Henüz kaydedilmiş bir ilanınız bulunmuyor.</p>
+        <a href="/listings" class="btn btn-primary" style="text-decoration: none;">🔍 İlanları İncele</a>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_css %}
 <style>
-    .listings-page { width: 100%; }
-    .listings-header { display: grid; gap: 1rem; margin-bottom: 1.5rem; }
-    .listings-header h1 { margin: 0; font-size: clamp(2rem, 4vw, 3.5rem); }
-    .listings-header p { margin: 0; color: rgba(255,255,255,0.72); }
-    .listings-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: 1rem;
-    }
-    .listing-card {
-        position: relative;
-        display: grid;
-        gap: 1rem;
-        border-radius: 24px;
-        padding: 1.25rem;
-        background: rgba(10, 15, 30, 0.72);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.24);
-        backdrop-filter: blur(18px);
-    }
-    .listing-title { margin: 0; font-size: 1.05rem; line-height: 1.35; }
-    .listing-price { font-size: 1.5rem; font-weight: 700; color: #fff; }
-    .meta-item { color: rgba(255,255,255,0.82); display:flex; gap:0.5rem; align-items:center; }
-    .listing-meta { display:flex; flex-direction:column; gap:0.5rem; }
-    .lifestyle-pill {
-        border-radius: 999px; padding: 0.35rem 0.75rem;
-        background: rgba(255,255,255,0.08); color:#fff; font-weight:600;
-    }
-    .listing-footer { display:flex; justify-content:flex-end; gap:0.5rem; }
-    .btn.btn-small {
-        border:0; border-radius:14px;
-        background: linear-gradient(135deg, #f8fafc, #cbd5e1);
-        color:#0f172a; padding:0.65rem 0.9rem; font-weight:700; cursor:pointer;
-    }
     .unsave-btn {
-        position: absolute; top: 0.85rem; right: 0.85rem;
-        background: rgba(220, 38, 38, 0.18);
-        border: 1px solid rgba(248, 113, 113, 0.35);
-        color: #fecaca; border-radius: 999px;
-        padding: 0.35rem 0.7rem; cursor: pointer; font-size: 0.9rem;
+        position: absolute;
+        top: 0.85rem;
+        right: 0.85rem;
+        background: rgba(239, 68, 68, 0.15);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        color: #fca5a5;
+        border-radius: 999px;
+        padding: 0.35rem 0.85rem;
+        cursor: pointer;
+        font-size: 0.82rem;
+        font-weight: 600;
+        transition: all 0.2s;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
     }
-    .unsave-btn:hover { background: rgba(220, 38, 38, 0.32); }
-    .no-results {
-        border-radius: 20px; padding: 1rem 1.25rem;
-        background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.08);
-    }
-    .loading-spinner-container {
-        grid-column: 1 / -1; min-height: 220px;
-        display: grid; place-items: center; gap: 0.75rem;
+    .unsave-btn:hover {
+        background: rgba(239, 68, 68, 0.28);
+        border-color: rgba(239, 68, 68, 0.45);
+        transform: scale(1.05);
     }
 </style>
 {% endblock %}
@@ -100,28 +73,57 @@
             empty.style.display = 'none';
             grid.innerHTML = items.map(renderCard).join('');
         } catch (err) {
-            grid.innerHTML = `<div class="no-results">Hata: ${err.message}</div>`;
+            grid.innerHTML = `<div class="no-results glass">Hata: ${err.message}</div>`;
         }
     }
 
     function renderCard(l) {
         const score = (typeof l.lifestyle_score === 'number') ? `${l.lifestyle_score.toFixed(1)}/10` : '-';
         const price = Number(l.price || 0).toLocaleString('tr-TR');
+        
+        // Match source styling classes
+        let srcClass = "is-seed";
+        if (l.source) {
+            const srcLower = l.source.toLowerCase();
+            if (srcLower.includes("emlakjet")) srcClass = "is-emlakjet";
+            else if (srcLower.includes("toki")) srcClass = "is-toki";
+            else if (srcLower.includes("hepsiemlak")) srcClass = "is-hepsiemlak";
+        }
+
         return `
-            <article class="listing-card">
+            <article class="listing-card glass">
                 <button class="unsave-btn" type="button" title="Kaydedilenlerden çıkar"
                         onclick="unsave(${l.id}, this)">❤️ Kaldır</button>
-                <h3 class="listing-title">${escapeHtml(l.title || 'Untitled')}</h3>
-                <div class="listing-price">₺${price}</div>
-                <div class="listing-meta">
-                    <div class="meta-item">📍 ${escapeHtml(l.district || 'Unknown')}</div>
-                    <div class="meta-item">📐 ${l.area_m2 || '-'} m²</div>
-                    <div class="meta-item">🏠 ${l.room_count_total || '-'} oda</div>
-                    <div class="meta-item">⭐ <span class="lifestyle-pill">${score}</span></div>
+                <div class="listing-header">
+                    <h3 class="listing-title" style="padding-right: 4.5rem;">${escapeHtml(l.title || 'Untitled')}</h3>
                 </div>
-                <div class="listing-footer">
-                    <button class="btn btn-small" type="button"
-                            onclick="window.location.href='/analyze?listing_id=${l.id}'">📊 Analiz Et</button>
+                <div class="listing-body">
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.25rem;">
+                        <span class="listing-source ${srcClass}">${escapeHtml(l.source || 'İlan')}</span>
+                    </div>
+                    <div class="listing-price">₺${price}</div>
+                    <div class="listing-meta">
+                        <div class="meta-item">
+                            <span class="meta-icon">📍</span>
+                            <span class="meta-text">${escapeHtml(l.district || 'Unknown')}</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">📐</span>
+                            <span class="meta-text">${l.area_m2 || '-'} m²</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">🛏️</span>
+                            <span class="meta-text">${l.room_count_total || '-'} Oda</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-icon">🌿</span>
+                            <span class="meta-text">Yaşam Skoru: <span class="lifestyle-pill">${score}</span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="listing-footer" style="margin-top: auto; padding-top: 0.75rem;">
+                    <button class="btn btn-amber btn-small" style="width: 100%; justify-content: center;" type="button"
+                            onclick="window.location.href='/analyze?listing_id=${l.id}'">📊 Tam Analiz Et</button>
                 </div>
             </article>`;
     }

@@ -2,17 +2,58 @@
 
 {% block title %}Dashboard - EmlakAI{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Small plus cross decorations near Akıllı Öneri card */
+    .cross-decor {
+        position: absolute;
+        color: rgba(255, 255, 255, 0.06);
+        font-family: monospace;
+        font-size: 0.75rem;
+        pointer-events: none;
+    }
+    .cross-decor-1 { top: 12px; right: 120px; }
+    .cross-decor-2 { bottom: 12px; right: 20px; }
+
+    /* Page-level decorative geometric star on far right */
+    .decor-star-bg {
+        position: absolute;
+        right: 3%;
+        bottom: 5%;
+        width: 80px;
+        height: 80px;
+        color: rgba(255, 255, 255, 0.05);
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.45;
+    }
+    .dashboard-decor-container {
+        position: relative;
+        width: 100%;
+        overflow: visible;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="dashboard-page">
+<div class="dashboard-page dashboard-decor-container">
+
+    <!-- Page decoration 4-pointed star -->
+    <svg class="decor-star-bg" viewBox="0 0 100 100" fill="currentColor">
+        <path d="M50 0 C53 35 65 47 100 50 C65 53 53 65 50 100 C47 65 35 53 0 50 C35 47 47 35 50 0 Z"/>
+    </svg>
 
     <!-- Hero Section -->
     <section class="hero-v2">
         <div class="hero-v2-inner">
-            <span class="hero-eyebrow">AI Odaklı Gayrimenkul</span>
-            <h1 class="hero-main-title">Hayalinizdeki Evi<br>AI ile Bulun</h1>
-            <p class="hero-subtitle">Türkiye'nin en akıllı emlak arama platformu — fiyat analizi, yaşam kalitesi skoru ve kişisel öneriler.</p>
+            <span class="hero-eyebrow" style="color: #7a7a8a; letter-spacing: 0.15em;">AI Odaklı Gayrimenkul</span>
+            <h1 class="hero-main-title">
+                Hayalinizdeki Evi<br>
+                <span class="highlight-gold" style="background: linear-gradient(135deg, #f5deb3 0%, #fde68a 50%, #c9a227 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: inline-block;">AI ile Bulun</span>
+            </h1>
+            <p class="hero-subtitle" style="color: #7a7a8a; font-size: 0.92rem; max-width: 520px; line-height: 1.6; margin-top: 0.5rem; text-align: center;">Türkiye'nin en akıllı emlak arama platformu — fiyat analizi, yaşam kalitesi skoru ve kişisel öneriler.</p>
 
-            <div class="hero-search-wrap">
+            <div class="hero-search-wrap" style="margin-top: 1rem; width: 100%; max-width: 560px;">
                 <div class="hero-search-bar">
                     <span class="hero-search-icon">📍</span>
                     <input type="text" id="heroSearch" class="hero-search-input" placeholder="Şehir, ilçe ya da mahalle ara...">
@@ -35,21 +76,39 @@
         <div class="feature-cards">
 
             <div class="feature-card glass">
-                <div class="feature-icon fi-price">📊</div>
-                <h3 class="feature-name">Fiyat Analizi</h3>
-                <p class="feature-desc">XGBoost ile değer tahmini. Overpriced / fair / underpriced verir.</p>
+                <div class="feature-card-content">
+                    <div class="feature-icon fi-price" style="color: var(--amber-light);">📊</div>
+                    <h3 class="feature-name">Fiyat Analizi</h3>
+                    <p class="feature-desc">XGBoost ile değer tahmini. Overpriced / fair / underpriced verir.</p>
+                </div>
+                <div class="feature-card-preview">
+                    <img src="/static/images/fiyat_analizi_preview.png" alt="Fiyat Analizi">
+                </div>
             </div>
 
             <div class="feature-card glass">
-                <div class="feature-icon fi-lifestyle">🌿</div>
-                <h3 class="feature-name">Yaşam Skoru</h3>
-                <p class="feature-desc">Çevredeki okul, hastane, metro ve park verisiyle 1–10 skor.</p>
+                <div class="feature-card-content">
+                    <div class="feature-icon fi-lifestyle" style="color: var(--teal-light);">🌿</div>
+                    <h3 class="feature-name">Yaşam Skoru</h3>
+                    <p class="feature-desc">Çevredeki okul, hastane, metro ve park verisiyle 1–10 skor.</p>
+                </div>
+                <div class="feature-card-preview">
+                    <img src="/static/images/yasam_skoru_preview.png" alt="Yaşam Skoru">
+                </div>
             </div>
 
-            <div class="feature-card glass">
-                <div class="feature-icon fi-rec">✨</div>
-                <h3 class="feature-name">Akıllı Öneri</h3>
-                <p class="feature-desc">Davranışınıza göre SVD ile kişiselleştirilmiş ilan önerileri.</p>
+            <div class="feature-card glass" style="position: relative;">
+                <!-- Cross decorations near Akıllı Öneri -->
+                <span class="cross-decor cross-decor-1">+</span>
+                <span class="cross-decor cross-decor-2">+</span>
+                <div class="feature-card-content">
+                    <div class="feature-icon fi-rec" style="color: #a855f7;">✨</div>
+                    <h3 class="feature-name">Akıllı Öneri</h3>
+                    <p class="feature-desc">Davranışınıza göre SVD ile kişiselleştirilmiş ilan önerileri.</p>
+                </div>
+                <div class="feature-card-preview">
+                    <img src="/static/images/akilli_oneri_preview.png" alt="Akıllı Öneri">
+                </div>
             </div>
 
         </div>
@@ -60,7 +119,7 @@
         <div class="cta-row">
             <a href="/listings" class="btn-cta btn-cta-green">🏠 Tüm İlanları Gör</a>
             <a href="#" class="btn-cta btn-cta-purple" id="chatCta">💬 AI ile Sohbet Et</a>
-            <a href="/analyze" class="btn-cta btn-cta-amber">✨ AI Analizi Başlat</a>
+            <a href="/analyze" class="btn-cta btn-cta-amber">✨ AI Analizi Başla</a>
         </div>
     </section>
 

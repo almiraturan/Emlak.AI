@@ -34,28 +34,68 @@
         margin-bottom: 1.5rem;
         border-radius: 16px;
     }
+    .listing-dropdown-list {
+        scrollbar-width: thin;
+        scrollbar-color: var(--teal-glow) transparent;
+    }
+    .listing-dropdown-list::-webkit-scrollbar {
+        width: 6px;
+    }
+    .listing-dropdown-list::-webkit-scrollbar-thumb {
+        background: var(--teal-glow);
+        border-radius: 3px;
+    }
+    .listing-dropdown-item {
+        padding: 0.75rem 1.25rem;
+        cursor: pointer;
+        color: var(--text-dim);
+        font-size: 0.9rem;
+        transition: all 0.2s;
+        text-align: left;
+    }
+    .listing-dropdown-item:hover {
+        background: rgba(217, 119, 6, 0.08);
+        color: var(--amber-light);
+    }
+    .listing-dropdown-item.selected {
+        background: rgba(217, 119, 6, 0.15);
+        color: var(--amber-light);
+        font-weight: 600;
+    }
+    .listing-dropdown-no-results {
+        padding: 0.75rem 1.25rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        font-style: italic;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="analyze-page">
-    <section class="analyze-header">
+    <section class="page-hero">
         <h1>Tam Analiz</h1>
-        <p>Bir kullanıcı ve İlan kombinasyonunun kapsamlı analizi</p>
+        <p>Bir kullanıcı ve ilan kombinasyonunun kapsamlı yapay zeka analizi</p>
     </section>
 
     <section class="analyze-inputs">
         <div class="input-group">
-            <label>User</label>
-            <div id="userInfo">Almira — ID: 1</div>
+            <label>Kullanıcı</label>
+            <div id="userInfo" style="font-weight: 600; color: var(--text); padding: 0.7rem 0.95rem; background: #0d0d14; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm);">Almira</div>
         </div>
-        <div class="input-group">
-            <label for="listingId">Listing ID</label>
-            <input type="number" id="listingId" placeholder="1" min="1" value="1">
+        <div class="input-group" style="position: relative;">
+            <label for="listingSelectSearch">İlan Seç</label>
+            <input type="text" id="listingSelectSearch" class="modal-input" placeholder="İlan ara..." autocomplete="off">
+            <input type="hidden" id="listingId" value="1">
+            <div id="listingDropdownList" class="listing-dropdown-list glass" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; width: 100%; max-height: 250px; overflow-y: auto; z-index: 1000; border-radius: var(--radius-sm); background: rgba(10, 10, 15, 0.98); border: 1px solid var(--border-hover); box-shadow: var(--shadow-lg); padding: 0.5rem 0;">
+                <!-- Dinamik olarak doldurulur -->
+            </div>
         </div>
-        <button class="btn btn-primary" onclick="runFullAnalysis()">
-            <span id="analyzeButtonText">📊 Tam Analiz Yap</span>
-        </button>
+        <div style="display: flex; align-items: flex-end;">
+            <button class="btn btn-primary" onclick="runFullAnalysis()" style="width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; margin-top: auto;">
+                <span id="analyzeButtonText">📊 Tam Analiz Yap</span>
+            </button>
+        </div>
     </section>
 
     <!-- Loading States -->
@@ -247,17 +287,97 @@
     let isCurrentlySaved = false;
     let currentListingId = null;
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const activeName = localStorage.getItem('emlakai_user_name') || 'Almira';
-        document.getElementById('userInfo').textContent = `${activeName} — ID: ${DEMO_USER_ID}`;
+    let allListingsForSelection = [];
 
-        const params = new URLSearchParams(window.location.search);
-        const lid = params.get('listing_id');
-        if (lid) {
-            document.getElementById('listingId').value = lid;
-            runFullAnalysis();
-        }
+    document.addEventListener('DOMContentLoaded', async () => {
+        const activeName = localStorage.getItem('emlakai_user_name') || 'Almira';
+        document.getElementById('userInfo').textContent = activeName;
+
+        await fetchListingsForDropdown();
+        setupDropdownInteractions();
     });
+
+    async function fetchListingsForDropdown() {
+        try {
+            const res = await fetch('/api/listings/selector');
+            if (!res.ok) throw new Error('İlanlar yüklenemedi');
+            allListingsForSelection = await res.json();
+            
+            // Read ?listing_id= from URL
+            const params = new URLSearchParams(window.location.search);
+            const lid = parseInt(params.get('listing_id'));
+            if (lid) {
+                const selected = allListingsForSelection.find(l => l.id === lid);
+                if (selected) {
+                    document.getElementById('listingId').value = selected.id;
+                    document.getElementById('listingSelectSearch').value = selected.title;
+                } else {
+                    document.getElementById('listingId').value = lid;
+                    document.getElementById('listingSelectSearch').value = `İlan #${lid}`;
+                }
+                runFullAnalysis();
+            } else if (allListingsForSelection.length > 0) {
+                // Pre-select first listing
+                const first = allListingsForSelection[0];
+                document.getElementById('listingId').value = first.id;
+                document.getElementById('listingSelectSearch').value = first.title;
+            }
+        } catch (err) {
+            console.error('Listings selector error:', err);
+        }
+    }
+
+    function setupDropdownInteractions() {
+        const searchInput = document.getElementById('listingSelectSearch');
+        const dropdownList = document.getElementById('listingDropdownList');
+        const hiddenInput = document.getElementById('listingId');
+
+        function filterAndShowDropdown() {
+            const query = searchInput.value.toLowerCase().trim();
+            dropdownList.innerHTML = '';
+            
+            const filtered = allListingsForSelection.filter(l => 
+                l.title.toLowerCase().includes(query) || l.id.toString() === query
+            );
+
+            if (filtered.length === 0) {
+                dropdownList.innerHTML = '<div class="listing-dropdown-no-results">Arama sonucu bulunamadı</div>';
+            } else {
+                filtered.forEach(l => {
+                    const item = document.createElement('div');
+                    item.className = 'listing-dropdown-item' + (hiddenInput.value == l.id ? ' selected' : '');
+                    item.textContent = l.title;
+                    item.onclick = () => {
+                        hiddenInput.value = l.id;
+                        searchInput.value = l.title;
+                        dropdownList.style.display = 'none';
+                        runFullAnalysis();
+                    };
+                    dropdownList.appendChild(item);
+                });
+            }
+            dropdownList.style.display = 'block';
+        }
+
+        searchInput.addEventListener('focus', () => {
+            filterAndShowDropdown();
+        });
+
+        searchInput.addEventListener('input', () => {
+            filterAndShowDropdown();
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#listingSelectSearch') && !e.target.closest('#listingDropdownList')) {
+                dropdownList.style.display = 'none';
+                const currentId = parseInt(hiddenInput.value);
+                const currentSelected = allListingsForSelection.find(l => l.id === currentId);
+                if (currentSelected) {
+                    searchInput.value = currentSelected.title;
+                }
+            }
+        });
+    }
 
     async function trackBehavior(behaviorType, listingId, metadata) {
         return; // Stopped logging user activity history
@@ -311,7 +431,7 @@
                 if (current < engines.length) {
                     const element = document.getElementById(engines[current]);
                     const spinner = element.querySelector('.loading-spinner');
-                    spinner.style.borderTopColor = '#00d4aa';
+                    spinner.style.borderTopColor = 'var(--teal-light)';
                     element.classList.add('completed');
                     current++;
                 } else {
