@@ -85,8 +85,8 @@ class ComparisonAgent(BaseAgent):
 
                 listing_scores[listing_id] = scores
 
-            # If Ollama available, use LLM for intelligent ranking
-            if self.is_ollama_available() and listing_scores:
+            # If LLM available, use LLM for intelligent ranking
+            if self.is_llm_available() and listing_scores:
                 ranking, trade_offs = self._get_llm_comparison(
                     profile, listing_scores
                 )

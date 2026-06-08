@@ -22,6 +22,7 @@ from app.routes.price_analysis import router as price_analysis_router
 from app.routes.profile import router as profile_router
 from app.routes.qa import router as qa_router
 from app.routes.recommendation import router as recommendation_router
+from app.routes.geocoding import router as geocoding_router
 from app.routes.saved import router as saved_router
 
 setup_logging(settings.log_level)
@@ -145,6 +146,7 @@ app.include_router(comparison_router)
 app.include_router(recommendation_router)
 app.include_router(qa_router)
 app.include_router(chat_router)
+app.include_router(geocoding_router)
 app.include_router(saved_router)
 app.include_router(email_router)
 

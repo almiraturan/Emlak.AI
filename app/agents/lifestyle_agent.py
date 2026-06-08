@@ -159,8 +159,8 @@ class LifestyleAgent(BaseAgent):
                 radius_m=radius_m,
             )
 
-            # Step 2: Augmented Generation - send to LLM
-            if sum(pois.values()) > 0:
+            # Step 2: Augmented Generation - send to LLM (if available)
+            if sum(pois.values()) > 0 and self.is_llm_available():
                 # Format POI list for LLM
                 poi_text = ", ".join(
                     [f"{k}: {v}" for k, v in pois.items() if v > 0]

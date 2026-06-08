@@ -482,6 +482,27 @@
         color: #bfdbfe;
     }
 
+    .listing-card.is-recommended {
+        border: 1px solid rgba(139, 92, 246, 0.55);
+        box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.25), 0 4px 24px rgba(139, 92, 246, 0.15);
+    }
+
+    .rec-badge {
+        position: absolute;
+        top: 0.65rem;
+        left: 0.65rem;
+        background: rgba(139, 92, 246, 0.85);
+        color: #ede9fe;
+        border-radius: 999px;
+        padding: 0.25rem 0.65rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        backdrop-filter: blur(4px);
+        z-index: 2;
+        pointer-events: none;
+    }
+
     .lifestyle-pill {
         border-radius: 999px;
         padding: 0.35rem 0.75rem;
@@ -821,6 +842,7 @@
     let totalCount = 0;
     let currentItems = [];
     let activeChatFilters = {};
+    let recommendedListings = [];
     let savedIds = new Set();
     let compareIds = new Set();
 
@@ -942,6 +964,17 @@
                 break;
         }
 
+        if (recommendedListings.length > 0 && currentPage === 1) {
+            const recIds = new Set(recommendedListings.map(l => l.id));
+            const pinned = recommendedListings.filter(l => {
+                const title = (l.title || '').toLowerCase();
+                const district = (l.district || '').toLowerCase();
+                return !searchTerm || title.includes(searchTerm) || district.includes(searchTerm);
+            });
+            const rest = items.filter(l => !recIds.has(l.id));
+            items = [...pinned, ...rest];
+        }
+
         displayListings(items);
         renderPagination();
     }
@@ -1027,7 +1060,8 @@
 
         grid.style.display = 'grid';
         noResults.style.display = 'none';
-        grid.innerHTML = listings.map(listing => createListingCard(listing)).join('');
+        const recRankMap = new Map(recommendedListings.map((l, i) => [l.id, i + 1]));
+        grid.innerHTML = listings.map(listing => createListingCard(listing, recRankMap.get(listing.id) || 0)).join('');
 
         const cards = grid.querySelectorAll('.listing-card');
         cards.forEach((card, index) => {
@@ -1169,7 +1203,7 @@
         }
     }
 
-    function createListingCard(listing) {
+    function createListingCard(listing, recRank = 0) {
         const lifestyleScore = typeof listing.lifestyle_score === 'number' ? listing.lifestyle_score : null;
         const priceVerdict = listing.price_verdict || 'fair';
         const priceValue = Number(listing.price || 0);
@@ -1188,8 +1222,12 @@
 
         const isSaved = savedIds.has(listing.id);
         const isComparing = compareIds.has(listing.id);
+        const recBadge = recRank > 0
+            ? `<span class="rec-badge" title="AI tarafından ${recRank}. sırada önerildi">🤖 #${recRank}</span>`
+            : '';
         return `
-            <article class="listing-card glass">
+            <article class="listing-card glass${recRank > 0 ? ' is-recommended' : ''}">
+            ${recBadge}
                 <button class="save-btn ${isSaved ? 'is-saved' : ''}" type="button"
                         title="${isSaved ? 'Kaydedildi' : 'Kaydet'}"
                         onclick="event.stopPropagation(); toggleSave(${listing.id}, this)">${isSaved ? '❤️' : '🤍'}</button>
@@ -1252,12 +1290,36 @@
                 appendChat('bot', "Merhaba! Nasıl bir ev arıyorsun? Bütçe, oda sayısı, semt veya tarz (sakin / merkezi / lüks) yazabilirsin.");
             }
         });
-        close.addEventListener('click', () => { panel.hidden = true; });
+        close.addEventListener('click', () => {
+            panel.hidden = true;
+            recommendedListings = [];
+            render();
+        });
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const text = input.value.trim();
             if (!text) return;
+
+            // Handle navigation commands locally without hitting the backend
+            const navRank = detectNavIntent(text);
+            if (navRank !== null) {
+                appendChat('user', text);
+                input.value = '';
+                if (recommendedListings.length === 0) {
+                    appendChat('bot', 'Önce bir arama yap, sonra ilanlar arasında gezebilirim.');
+                    return;
+                }
+                const target = recommendedListings[navRank - 1];
+                if (!target) {
+                    appendChat('bot', `${navRank}. öneri bulunamadı. Elimde ${recommendedListings.length} tavsiye var.`);
+                    return;
+                }
+                appendChat('bot', `${navRank}. ilan açılıyor: **${target.title}**`);
+                setTimeout(() => goToAnalyze(target.id), 700);
+                return;
+            }
+
             appendChat('user', text);
             input.value = '';
             const typing = appendChat('bot', 'Yazıyor…', { typing: true });
@@ -1270,7 +1332,10 @@
                 const data = await res.json();
                 typing.remove();
                 appendChat('bot', data.reply || '...');
-                applyChatFilters(data.filters || {});
+                recommendedListings = data.listings || [];
+                activeChatFilters = data.filters || {};
+                renderFilterChips();
+                applyRecommendationsToGrid(data.filters || {});
                 trackBehaviorFromChat(text);
             } catch (err) {
                 typing.remove();
@@ -1302,10 +1367,87 @@
         loadListings(1).then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
     }
 
+    function detectNavIntent(rawText) {
+        if (recommendedListings.length === 0) return null;
+
+        const t = rawText.toLowerCase()
+            .replace(/ı/g, 'i').replace(/ğ/g, 'g').replace(/ş/g, 's')
+            .replace(/ç/g, 'c').replace(/ö/g, 'o').replace(/ü/g, 'u');
+
+        // Listing reference — allow Turkish suffixes (ilanı→ilani, evi, tavsiyeyi…)
+        const hasListing = /(ilan|daire|tavsiye|oneri|ev)/.test(t);
+        // Action or query word
+        const hasAction = /\b(gotur|getir|goster|git|ac|incele|analiz|ver|bak|ne)\b/.test(t);
+        if (!hasListing && !hasAction) return null;
+
+        // "ilk" → rank 1
+        if (/\bilk\b/.test(t)) return 1;
+
+        // Turkish ordinal words
+        const ordinals = [['birinci', 1], ['ikinci', 2], ['ucuncu', 3], ['dorduncu', 4], ['besinci', 5]];
+        for (const [w, n] of ordinals) {
+            if (t.includes(w)) return n;
+        }
+
+        // Numeric ordinal with dot: "1. ilan", "2. evi" — suffixes allowed
+        const m = t.match(/\b([1-5])\.\s*(ilan|ev|daire|tavsiye|oneri)/);
+        if (m) return parseInt(m[1]);
+
+        return null;
+    }
+
+    function applyRecommendationsToGrid(filters) {
+        console.log('[EmlakAI] applyRecommendationsToGrid called, listings:', recommendedListings.length);
+        if (recommendedListings.length > 0) {
+            // Direct DOM write — bypasses render()/displayListings() entirely for the initial paint
+            const grid = document.getElementById('listingsGrid');
+            const noResults = document.getElementById('noResults');
+            const pagination = document.getElementById('pagination');
+
+            noResults.style.display = 'none';
+            grid.style.display = 'grid';
+
+            const recRankMap = new Map(recommendedListings.map((l, i) => [l.id, i + 1]));
+            grid.innerHTML = recommendedListings
+                .map(l => createListingCard(l, recRankMap.get(l.id) || 0))
+                .join('');
+            grid.querySelectorAll('.listing-card').forEach((card, i) => {
+                card.style.animation = 'slideInUp 0.4s ease forwards';
+                card.style.animationDelay = `${i * 0.05}s`;
+            });
+            pagination.innerHTML = `<span class="pagination-info">✨ AI önerileri · ${recommendedListings.length} sonuç</span>`;
+
+            currentItems = [...recommendedListings];
+            currentPage = 1;
+            totalPages = 1;
+            totalCount = recommendedListings.length;
+
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // Then silently load the remaining matching listings and append them
+            fetch(`/api/listings?${buildListingsQuery(1)}`)
+                .then(r => r.ok ? r.json() : Promise.reject())
+                .then(d => {
+                    const recIds = new Set(recommendedListings.map(l => l.id));
+                    const rest = (d.items || []).filter(l => !recIds.has(l.id));
+                    currentItems = [...recommendedListings, ...rest];
+                    currentPage = d.page || 1;
+                    totalPages = d.total_pages || 1;
+                    totalCount = d.total || currentItems.length;
+                    render();
+                })
+                .catch(() => {});
+        } else {
+            console.log('[EmlakAI] No recommended listings — loading default grid');
+            loadListings(1).then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+        }
+    }
+
     function renderFilterChips() {
         const bar = document.getElementById('chatFiltersBar');
         const chips = [];
         const f = activeChatFilters;
+        if (f.city) chips.push(`🏙️ ${f.city.charAt(0).toUpperCase() + f.city.slice(1)}`);
         if (f.district) chips.push(`📍 ${f.district}`);
         if (f.min_rooms || f.max_rooms) {
             const r = f.min_rooms === f.max_rooms ? f.min_rooms : `${f.min_rooms || 0}-${f.max_rooms || '∞'}`;
@@ -1326,6 +1468,7 @@
 
     function clearChatFilters() {
         activeChatFilters = {};
+        recommendedListings = [];
         renderFilterChips();
         loadListings(1);
     }

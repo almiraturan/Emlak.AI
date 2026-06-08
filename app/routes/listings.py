@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api", tags=["listings"])
 def read_listings(
     page: int = 1,
     page_size: int = 10,
+    city: str | None = Query(default=None),
     district: str | None = Query(default=None),
     min_price: float | None = Query(default=None, ge=0),
     max_price: float | None = Query(default=None, ge=0),
@@ -30,6 +31,8 @@ def read_listings(
 
     query = db.query(Listing).filter(Listing.is_active.is_(True))
 
+    if city:
+        query = query.filter(Listing.city_canonical == city.lower())
     if district:
         query = query.filter(Listing.district_canonical == district.lower())
     if min_price is not None:
@@ -48,7 +51,7 @@ def read_listings(
     elif sort_by == "price_desc":
         query = query.order_by(desc(Listing.price))
     elif sort_by == "lifestyle_score":
-        query = query.order_by(desc(Listing.lifestyle_score), desc(Listing.id))
+        query = query.order_by(desc(Listing.lifestyle_score).nullslast(), desc(Listing.id))
     else:
         query = query.order_by(Listing.published_at.desc().nullslast(), Listing.id.desc())
 

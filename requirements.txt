@@ -15,4 +15,5 @@ pandas==2.2.2
 numpy==1.26.4
 requests==2.31.0
 jinja2==3.0.3
+google-generativeai==0.8.3
 

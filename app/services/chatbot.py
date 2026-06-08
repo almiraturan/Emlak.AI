@@ -12,9 +12,29 @@ from sqlalchemy import asc, desc
 from sqlalchemy.orm import Session
 
 from app.agents.base import BaseAgent
+from app.agents.lifestyle_agent import LifestyleAgent
 from app.models.listing import Listing
 
 logger = logging.getLogger(__name__)
+
+KNOWN_CITIES: dict[str, str] = {
+    "istanbul": "istanbul",
+    "ankara": "ankara",
+    "izmir": "izmir",
+    "bursa": "bursa",
+    "antalya": "antalya",
+    "adana": "adana",
+    "konya": "konya",
+    "gaziantep": "gaziantep",
+    "kayseri": "kayseri",
+    "mersin": "mersin",
+    "samsun": "samsun",
+    "eskisehir": "eskisehir",
+    "denizli": "denizli",
+    "trabzon": "trabzon",
+    "sakarya": "sakarya",
+    "kocaeli": "kocaeli",
+}
 
 KNOWN_DISTRICTS = [
     # İstanbul Avrupa
@@ -67,6 +87,7 @@ def _parse_num(s: str) -> Optional[int]:
 
 @dataclass
 class ChatFilters:
+    city: Optional[str] = None
     district: Optional[str] = None
     min_price: Optional[float] = None
     max_price: Optional[float] = None
@@ -79,6 +100,14 @@ class ChatFilters:
     sort_by: str = "lifestyle_score"
     keywords: list[str] = field(default_factory=list)
     context: str = ""
+    
+    # POI-based filtering (for pets, children, elderly, health)
+    needs_park_nearby: bool = False  # Pets, recreation
+    needs_playground_nearby: bool = False  # Children
+    needs_school_nearby: bool = False  # Children
+    needs_hospital_nearby: bool = False  # Elderly, chronic illness
+    needs_bus_metro_nearby: bool = False  # Transport-dependent
+    poi_max_distance_km: float = 2.0  # Max acceptable POI distance
 
     def to_dict(self) -> dict:
         d = {k: v for k, v in self.__dict__.items() if v not in (None, [], "")}
@@ -106,6 +135,12 @@ def _parse_price_token(num_text: str, unit: str) -> Optional[float]:
 def parse_message(message: str) -> ChatFilters:
     f = ChatFilters()
     text = _strip(message)
+
+    # --- City ---
+    for city_key, city_canonical in KNOWN_CITIES.items():
+        if re.search(r'\b' + city_key, text):
+            f.city = city_canonical
+            break
 
     # --- District ---
     for d in KNOWN_DISTRICTS:
@@ -194,11 +229,12 @@ def parse_message(message: str) -> ChatFilters:
         if "geniş" not in f.keywords:
             f.keywords.append("geniş")
 
-    # --- Pets ---
+    # --- Pets (park nearby) ---
     if any(w in text for w in _PET_WORDS):
         f.keywords.append("evcil hayvan dostu")
         f.min_lifestyle = 6.5
         f.context = "pets"
+        f.needs_park_nearby = True  # NEW: POI requirement
 
     # --- Student ---
     if any(w in text for w in _STUDENT_WORDS):
@@ -234,12 +270,15 @@ def parse_message(message: str) -> ChatFilters:
         if "okul yakını" not in f.keywords:
             f.keywords.extend(["okul yakını", f"{n_kids} çocuklu"])
         f.context = "family_kids"
+        f.needs_school_nearby = True  # NEW: POI requirement
+        f.needs_playground_nearby = True  # NEW: POI requirement
     elif any(w in text for w in _FAMILY_WORDS):
         f.keywords.append("aileye uygun")
         if f.min_rooms is None:
             f.min_rooms = 3
         f.min_lifestyle = 7.5
         f.context = "family"
+        f.needs_school_nearby = True  # NEW: POI requirement
 
     # --- Household size: "4 kişilik aile", "5 kişi" ---
     household_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:kisilik|kisili|kisi)\s*(?:aile|ev|hane)?", text)
@@ -269,12 +308,14 @@ def parse_message(message: str) -> ChatFilters:
             if kw not in f.keywords:
                 f.keywords.append(kw)
         f.context = "elderly_care"
+        f.needs_hospital_nearby = True  # NEW: POI requirement
     elif any(w in text for w in _ELDERLY_WORDS):
         f.keywords.append("yaşlı dostu")
         if f.min_rooms is None:
             f.min_rooms = 2
         f.min_lifestyle = 6.0
         f.context = "elderly"
+        f.needs_hospital_nearby = True  # NEW: POI requirement
 
     # --- Remote work ---
     if any(w in text for w in _REMOTE_WORDS):
@@ -303,6 +344,7 @@ def parse_message(message: str) -> ChatFilters:
     if any(w in text for w in _TRANSPORT_WORDS):
         if "toplu taşıma yakını" not in f.keywords:
             f.keywords.append("toplu taşıma yakını")
+        f.needs_bus_metro_nearby = True  # NEW: POI requirement
 
     # --- Building features: balkon, bahçe, asansör, garaj, güvenlik, manzara ---
     _feature_map = {
@@ -348,9 +390,25 @@ def parse_message(message: str) -> ChatFilters:
     return f
 
 
+def _check_poi_requirements(listing: Listing, filters: ChatFilters) -> bool:
+    return _check_poi_requirements_with_coords(listing, filters, listing.latitude, listing.longitude)
+
+
+def _check_poi_requirements_with_coords(
+    listing: Listing,
+    filters: ChatFilters,
+    lat: float | None,
+    lon: float | None,
+) -> bool:
+    # POI live-API checks are too slow for real-time chatbot use; accept all listings.
+    return True
+
+
 def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Listing]:
     q = db.query(Listing).filter(Listing.is_active.is_(True))
 
+    if filters.city:
+        q = q.filter(Listing.city_canonical == filters.city)
     if filters.district:
         q = q.filter(Listing.district_canonical == filters.district)
     if filters.min_price is not None:
@@ -375,9 +433,43 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
     elif filters.sort_by == "price_desc":
         q = q.order_by(desc(Listing.price))
     else:
-        q = q.order_by(desc(Listing.lifestyle_score), asc(Listing.price))
+        q = q.order_by(desc(Listing.lifestyle_score).nullslast(), asc(Listing.price))
 
-    return q.limit(limit).all()
+    # Get more results than needed if POI filtering is required
+    # (some may be filtered out)
+    fetch_limit = limit * 3 if any([
+        filters.needs_park_nearby,
+        filters.needs_playground_nearby,
+        filters.needs_school_nearby,
+        filters.needs_hospital_nearby,
+        filters.needs_bus_metro_nearby,
+    ]) else limit
+    
+    all_listings = q.limit(fetch_limit).all()
+
+    # Apply POI filtering if needed
+    poi_required = any([
+        filters.needs_park_nearby,
+        filters.needs_playground_nearby,
+        filters.needs_school_nearby,
+        filters.needs_hospital_nearby,
+        filters.needs_bus_metro_nearby,
+    ])
+    if poi_required:
+        from app.services.geocoding import get_centroid_for_listing
+        filtered = []
+        for listing in all_listings:
+            lat = listing.latitude
+            lon = listing.longitude
+            if (not lat or not lon):
+                centroid = get_centroid_for_listing(db, listing)
+                if centroid:
+                    lat, lon = centroid
+            if _check_poi_requirements_with_coords(listing, filters, lat, lon):
+                filtered.append(listing)
+        return filtered[:limit]
+
+    return all_listings[:limit]
 
 
 def _format_price(price) -> str:
@@ -493,3 +585,131 @@ def _llm_explain(message: str, filters: ChatFilters, picks: list[Listing], total
     except Exception as e:
         logger.debug(f"LLM explain failed: {e}")
         return None
+
+
+def analyze_user_input(message: str) -> dict:
+    """
+    Analyze user message to understand intent, needs, and characteristics.
+    Detects: pets, children, elderly, health conditions, transportation needs.
+    
+    Returns:
+        {
+            'intent': 'buy'|'rent'|'invest'|'consult',
+            'lifecycle': 'couple'|'family'|'student'|'elderly'|'professional'|'unknown',
+            'priority': list of priorities,
+            'detected_context': original context,
+            'summary': brief analysis,
+            'poi_needs': {
+                'park': bool (pets/recreation),
+                'playground': bool (children),
+                'school': bool (children),
+                'hospital': bool (elderly/health),
+                'transport': bool (metro/bus)
+            },
+            'health_needs': list of health conditions,
+            'pet_count': int or None,
+            'child_count': int or None,
+            'elderly_count': int or None
+        }
+    """
+    agent = BaseAgent()
+    if not agent.is_ollama_available():
+        return {
+            'intent': 'buy',
+            'lifecycle': 'unknown',
+            'priority': [],
+            'detected_context': '',
+            'summary': 'Analiz başarısız',
+            'poi_needs': {'park': False, 'playground': False, 'school': False, 'hospital': False, 'transport': False},
+            'health_needs': [],
+            'pet_count': None,
+            'child_count': None,
+            'elderly_count': None
+        }
+    
+    analysis_prompt = (
+        "Aşağıdaki Türkçe mesajı ayrıntılı analiz et. JSON formatında çıkış ver:\n\n"
+        
+        "1. TEMEL BİLGİ:\n"
+        "   - intent: 'buy', 'rent', 'invest' ya da 'consult'\n"
+        "   - lifecycle: 'couple', 'family', 'student', 'elderly', 'professional' ya da 'unknown'\n"
+        "   - priorities: En fazla 3 seçim: price, location, lifestyle, transport, schools, greenspace, social, work-from-home\n\n"
+        
+        "2. YAŞAM STİLÜ:\n"
+        "   - has_pets: true/false (köpek, kedi, hayvan)\n"
+        "   - pet_count: hayvan sayısı (1, 2, vb.) ya da null\n"
+        "   - has_children: true/false\n"
+        "   - child_count: çocuk sayısı ya da null\n"
+        "   - has_elderly: true/false (yaşlı, emekli, büyükanne/baba)\n"
+        "   - elderly_count: yaşlı sayısı ya da null\n\n"
+        
+        "3. SAĞLIK & KOŞULLAR:\n"
+        "   - health_conditions: [] ya da ['chronic_illness', 'mobility_issues', 'requires_medical_care'] vb.\n"
+        "   - poi_requirements: {{\n"
+        "       'park_nearby': bool (hayvanlar, rekreasyon için)\n"
+        "       'playground_nearby': bool (çocuklar için)\n"
+        "       'school_nearby': bool (çocuklar için)\n"
+        "       'hospital_nearby': bool (yaşlılar/sağlık durumları için)\n"
+        "       'bus_metro_nearby': bool (ulaşım bağımlılığı)\n"
+        "     }}\n\n"
+        
+        "4. OPSIYONEL:\n"
+        "   - main_keywords: belirtilen ana anahtar kelimeler\n"
+        "   - sentiment: 'positive', 'neutral', 'negative'\n\n"
+        
+        "Mesaj: {}\n\n"
+        "JSON çıkış (sadece JSON, başka hiçbir şey yok):"
+    ).format(message)
+    
+    try:
+        response_text = agent.call_llm(analysis_prompt)
+        if response_text:
+            result = agent.parse_json(response_text)
+            
+            # Ensure all required fields exist
+            result.setdefault('intent', 'buy')
+            result.setdefault('lifecycle', 'unknown')
+            result.setdefault('priority', [])
+            result.setdefault('poi_requirements', {
+                'park_nearby': False,
+                'playground_nearby': False,
+                'school_nearby': False,
+                'hospital_nearby': False,
+                'bus_metro_nearby': False
+            })
+            result.setdefault('health_conditions', [])
+            result.setdefault('pet_count', None)
+            result.setdefault('child_count', None)
+            result.setdefault('elderly_count', None)
+            result.setdefault('has_pets', False)
+            result.setdefault('has_children', False)
+            result.setdefault('has_elderly', False)
+            
+            # Build summary
+            parts = [f"Intent: {result.get('intent', 'unknown')}"]
+            if result.get('has_pets'):
+                parts.append(f"🐕 {result.get('pet_count', 1)} hayvan")
+            if result.get('has_children'):
+                parts.append(f"👧 {result.get('child_count', 1)} çocuk")
+            if result.get('has_elderly'):
+                parts.append(f"👴 {result.get('elderly_count', 1)} yaşlı")
+            if result.get('health_conditions'):
+                parts.append(f"⚕️ {', '.join(result['health_conditions'])}")
+            
+            result['summary'] = " | ".join(parts)
+            return result
+    except Exception as e:
+        logger.debug(f"User input analysis failed: {e}")
+    
+    return {
+        'intent': 'buy',
+        'lifecycle': 'unknown',
+        'priority': [],
+        'detected_context': '',
+        'summary': 'Analiz başarısız',
+        'poi_needs': {'park': False, 'playground': False, 'school': False, 'hospital': False, 'transport': False},
+        'health_needs': [],
+        'pet_count': None,
+        'child_count': None,
+        'elderly_count': None
+    }

@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     # Guvenli varsayilan: seed startup'ta kapali gelir, sadece gerekiyorsa acilir.
     seed_on_startup: bool = False
 
+    # Gemini AI configuration
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+    llm_timeout_seconds: int = 60
+
     # Logging configuration
     log_level: str = "INFO"
     # CORS configuration

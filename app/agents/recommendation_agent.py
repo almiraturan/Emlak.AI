@@ -324,7 +324,7 @@ class RecommendationAgent(BaseAgent):
     ) -> List[Dict]:
         """Get LLM descriptions for recommendations."""
         try:
-            if not recommendations or not self.is_ollama_available():
+            if not recommendations or not self.is_llm_available():
                 # Use default descriptions
                 for rec in recommendations:
                     rec["description"] = "Recommended based on your profile and preferences"
