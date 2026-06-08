@@ -87,535 +87,12 @@
 </div>
 {% endblock %}
 
+
 {% block extra_css %}
 <style>
     .listings-page {
         width: 100%;
     }
-</style>
-{% endblock %}
-
-
-{% block extra_js %}
-<script>
-    const PAGE_SIZE = 10;
-    const USER_ID = localStorage.getItem('emlakai_user_id') || 1;
-    let currentPage = 1;
-    let totalPages = 1;
-    let totalCount = 0;
-    let currentItems = [];
-    let activeChatFilters = {};
-    let savedIds = new Set();
-    let compareIds = new Set();
-
-    let searchDebounceTimer = null;
-
-    document.addEventListener('DOMContentLoaded', async () => {
-        // Read ?search= from URL and pre-fill the search input
-        const urlParams = new URLSearchParams(window.location.search);
-        const urlSearch = urlParams.get('search');
-        if (urlSearch) {
-            document.getElementById('searchInput').value = urlSearch;
-        }
-
-        await loadSavedIds();
-        await loadListings(1);
-
-        // Server-side search: debounce and reload from API
-        document.getElementById('searchInput').addEventListener('input', () => {
-            clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = setTimeout(() => loadListings(1), 350);
-        });
-        document.getElementById('sortSelect').addEventListener('change', () => loadListings(1));
-
-        initChat();
-        initEmailModal();
-    });
-
-    function initEmailModal() {
-        const btn = document.createElement('button');
-        btn.id = 'emailSubBtn';
-        btn.className = 'chat-toggle';
-        btn.textContent = '📧';
-        btn.title = 'Email Aboneliği';
-        btn.type = 'button';
-        btn.style.bottom = '5.5rem';
-        btn.onclick = openEmailModal;
-        document.body.appendChild(btn);
-    }
-
-    function openEmailModal() {
-        document.getElementById('emailModal').hidden = false;
-    }
-
-    function closeEmailModal() {
-        document.getElementById('emailModal').hidden = true;
-        document.getElementById('emailStatus').className = 'email-status';
-        document.getElementById('emailStatus').textContent = '';
-    }
-
-    async function handleEmailSubmit(e) {
-        e.preventDefault();
-        const email = document.getElementById('emailInput').value;
-        const minScore = parseInt(document.getElementById('lifestyleSelect').value);
-        const status = document.getElementById('emailStatus');
-
-        status.className = 'email-status';
-        status.textContent = 'Kaydediliyor...';
-
-        try {
-            const res = await fetch('/api/email/subscribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    email,
-                    user_id: parseInt(USER_ID),
-                    min_lifestyle_score: minScore,
-                }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-            status.className = 'email-status success';
-            status.textContent = `✓ ${email} başarıyla kaydedildi! Yaşam puanı ${minScore}+ olan yeni ilanları email ile alacaksın.`;
-            document.getElementById('emailForm').reset();
-            setTimeout(closeEmailModal, 3000);
-        } catch (err) {
-            status.className = 'email-status error';
-            status.textContent = `✗ Hata: ${err.message}`;
-        }
-    }
-
-    function buildListingsQuery(page) {
-        const params = new URLSearchParams({ page, page_size: PAGE_SIZE, user_id: USER_ID });
-
-        // Include the search input value for server-side search
-        const searchTerm = document.getElementById('searchInput').value.trim();
-        if (searchTerm) params.set('search', searchTerm);
-
-        // Include sort
-        const sortBy = document.getElementById('sortSelect').value;
-        if (sortBy && sortBy !== 'recent') params.set('sort_by', sortBy);
-
-        for (const [k, v] of Object.entries(activeChatFilters)) {
-            if (v === null || v === undefined || v === '' || Array.isArray(v)) continue;
-            if (k === 'sort_by') params.set('sort_by', v);
-            else params.set(k, v);
-        }
-        return params.toString();
-    }
-
-    async function loadListings(page) {
-        const grid = document.getElementById('listingsGrid');
-        grid.innerHTML = `
-            <div class="loading-spinner-container">
-                <div class="loading-spinner"></div>
-                <p>İlanlar yükleniyor...</p>
-            </div>`;
-        try {
-            const response = await fetch(`/api/listings?${buildListingsQuery(page)}`);
-            if (!response.ok) throw new Error('Failed to load listings');
-            const data = await response.json();
-            currentItems = data.items || [];
-            currentPage = data.page || page;
-            totalPages = data.total_pages || 1;
-            totalCount = data.total || currentItems.length;
-            render();
-        } catch (error) {
-            console.error('Error loading listings:', error);
-            grid.innerHTML = `<div class="error-message">Hata: ${error.message}</div>`;
-            document.getElementById('pagination').innerHTML = '';
-        }
-    }
-
-    function render() {
-        // Server-side search+sort — just display what the API returned
-        displayListings(currentItems);
-        renderPagination();
-    }
-
-    function renderPagination() {
-        const nav = document.getElementById('pagination');
-        if (totalPages <= 1) {
-            nav.innerHTML = `<span class="pagination-info">Toplam ${totalCount} ilan</span>`;
-            return;
-        }
-
-        const pages = pageRange(currentPage, totalPages);
-        const buttons = [];
-        buttons.push(`<button type="button" data-page="${currentPage - 1}" ${currentPage === 1 ? 'disabled' : ''}>‹</button>`);
-        for (const p of pages) {
-            if (p === '…') {
-                buttons.push(`<span class="pagination-ellipsis">…</span>`);
-            } else {
-                buttons.push(`<button type="button" data-page="${p}" class="${p === currentPage ? 'is-active' : ''}">${p}</button>`);
-            }
-        }
-        buttons.push(`<button type="button" data-page="${currentPage + 1}" ${currentPage === totalPages ? 'disabled' : ''}>›</button>`);
-        buttons.push(`<span class="pagination-info">Sayfa ${currentPage} / ${totalPages} · ${totalCount} ilan</span>`);
-        nav.innerHTML = buttons.join('');
-
-        nav.querySelectorAll('button[data-page]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const page = parseInt(btn.getAttribute('data-page'), 10);
-                if (!Number.isFinite(page) || page < 1 || page > totalPages || page === currentPage) return;
-                loadListings(page).then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
-            });
-        });
-    }
-
-    function pageRange(current, total) {
-        const range = [];
-        const around = 1;
-        const push = (v) => { if (range[range.length - 1] !== v) range.push(v); };
-        push(1);
-        if (current - around > 2) push('…');
-        for (let i = Math.max(2, current - around); i <= Math.min(total - 1, current + around); i++) push(i);
-        if (current + around < total - 1) push('…');
-        if (total > 1) push(total);
-        return range;
-    }
-
-
-
-    function displayListings(listings) {
-        const grid = document.getElementById('listingsGrid');
-        const noResults = document.getElementById('noResults');
-
-        if (listings.length === 0) {
-            grid.style.display = 'none';
-            noResults.style.display = 'block';
-            return;
-        }
-
-        grid.style.display = 'grid';
-        noResults.style.display = 'none';
-        grid.innerHTML = listings.map(listing => createListingCard(listing)).join('');
-
-        const cards = grid.querySelectorAll('.listing-card');
-        cards.forEach((card, index) => {
-            card.style.animation = `slideInUp 0.4s ease forwards`;
-            card.style.animationDelay = `${index * 0.05}s`;
-        });
-    }
-
-    async function loadSavedIds() {
-        try {
-            const res = await fetch(`/api/saved?user_id=${USER_ID}`);
-            if (!res.ok) return;
-            const items = await res.json();
-            savedIds = new Set(items.map(i => i.id));
-        } catch (_) { /* ignore */ }
-    }
-
-    async function toggleSave(listingId, btn) {
-        const isSaved = savedIds.has(listingId);
-        btn.disabled = true;
-        try {
-            if (isSaved) {
-                await fetch(`/api/saved/${listingId}?user_id=${USER_ID}`, { method: 'DELETE' });
-                savedIds.delete(listingId);
-                btn.classList.remove('is-saved');
-                btn.textContent = '🤍';
-                btn.title = 'Kaydet';
-            } else {
-                await fetch('/api/saved', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ listing_id: listingId, user_id: USER_ID }),
-                });
-                savedIds.add(listingId);
-                btn.classList.add('is-saved');
-                btn.textContent = '❤️';
-                btn.title = 'Kaydedildi';
-            }
-        } catch (err) {
-            console.warn('Save toggle failed', err);
-        } finally {
-            btn.disabled = false;
-        }
-    }
-
-    function toggleCompare(listingId, btn) {
-        if (compareIds.has(listingId)) {
-            compareIds.delete(listingId);
-            btn.classList.remove('is-comparing');
-            btn.title = 'Karşılaştır';
-        } else {
-            if (compareIds.size >= 2) {
-                const first = [...compareIds][0];
-                compareIds.delete(first);
-                const firstBtn = document.getElementById('cmp-' + first);
-                if (firstBtn) { firstBtn.classList.remove('is-comparing'); firstBtn.title = 'Karşılaştır'; }
-            }
-            compareIds.add(listingId);
-            btn.classList.add('is-comparing');
-            btn.title = 'Karşılaştırmadan çıkar';
-        }
-        renderCompareBar();
-    }
-
-    function renderCompareBar() {
-        const bar = document.getElementById('compareBar');
-        const countEl = document.getElementById('compareCount');
-        const runBtn = document.getElementById('compareRunBtn');
-        const n = compareIds.size;
-        if (n === 0) { bar.hidden = true; return; }
-        bar.hidden = false;
-        countEl.textContent = n;
-        runBtn.disabled = n < 2;
-    }
-
-    function clearCompare() {
-        compareIds.forEach(id => {
-            const btn = document.getElementById('cmp-' + id);
-            if (btn) { btn.classList.remove('is-comparing'); btn.title = 'Karşılaştır'; }
-        });
-        compareIds.clear();
-        renderCompareBar();
-    }
-
-    function renderCompareResult(data) {
-        const items = data.comparisons || [];
-        if (!items.length) return '<p>Karşılaştırma verisi bulunamadı.</p>';
-
-        const winner = items.reduce((a, b) => (b.total_score > a.total_score ? b : a));
-
-        const verdictMap = { underpriced: ['verdict-underpriced', 'Ucuz'], overpriced: ['verdict-overpriced', 'Pahalı'], fair: ['verdict-fair', 'Adil'] };
-
-        const cards = items.map(item => {
-            const isWinner = item.listing_id === winner.listing_id;
-            const [vClass, vText] = verdictMap[item.price_verdict] || ['verdict-fair', 'Adil'];
-            return `
-                <div class="cmp-card ${isWinner ? 'is-winner' : ''}">
-                    <div class="cmp-title">${item.title}</div>
-                    <div class="cmp-score">${item.total_score ?? '-'}</div>
-                    <div class="cmp-score-label">Toplam Puan</div>
-                    <div class="cmp-rows">
-                        <div class="cmp-row"><span>💰 Fiyat</span><strong>₺${Number(item.price).toLocaleString('tr-TR')}</strong></div>
-                        <div class="cmp-row"><span>🌿 Yaşam</span><strong>${item.lifestyle_score ?? '-'}/10</strong></div>
-                        <div class="cmp-row"><span>📍 Konum</span><strong>${item.location_score ?? '-'}/10</strong></div>
-                        <div class="cmp-row"><span>Fiyat</span><span class="verdict-pill ${vClass}">${vText}</span></div>
-                    </div>
-                </div>`;
-        }).join('');
-
-        const banner = `<div class="cmp-winner-banner">🏆 <strong>${winner.title}</strong> daha iyi bir seçim (${winner.total_score} puan)</div>`;
-
-        const tradeoffs = (data.trade_offs || []).length
-            ? `<div class="cmp-tradeoffs">
-                <h4>Trade-off'lar</h4>
-                ${data.trade_offs.map(t => `<div class="cmp-tradeoff-item">• ${t}</div>`).join('')}
-               </div>`
-            : '';
-
-        return `${banner}<div class="cmp-grid">${cards}</div>${tradeoffs}`;
-    }
-
-    async function runCompare() {
-        const [id1, id2] = [...compareIds];
-        const modal = document.getElementById('compareModal');
-        const result = document.getElementById('compareResult');
-        modal.hidden = false;
-        result.textContent = 'Karşılaştırılıyor...';
-        try {
-            const res = await fetch('/api/compare', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ listing_ids: [id1, id2], user_id: USER_ID }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
-            result.innerHTML = renderCompareResult(data);
-        } catch (err) {
-            result.textContent = 'Hata: ' + err.message;
-        }
-    }
-
-    function createListingCard(listing) {
-        const lifestyleScore = typeof listing.lifestyle_score === 'number' ? listing.lifestyle_score : null;
-        const priceVerdict = listing.price_verdict || 'fair';
-        const priceValue = Number(listing.price || 0);
-        const source = (listing.source || '').toLowerCase();
-
-        let sourceLabel = 'Seed';
-        let sourceClass = 'is-seed';
-        if (source === 'emlakjet') {
-            sourceLabel = 'EmlakJet';
-            sourceClass = 'is-emlakjet';
-        } else if (source === 'toki') {
-            sourceLabel = 'TOKİ';
-            sourceClass = 'is-toki';
-        } else if (source === 'hepsiemlak') {
-            sourceLabel = 'Hepsiemlak';
-            sourceClass = 'is-hepsiemlak';
-        } else if (source) {
-            sourceLabel = source.charAt(0).toUpperCase() + source.slice(1);
-        }
-
-        let verdictClass = 'fair';
-        let verdictText = 'Adil';
-        if (priceVerdict === 'overpriced') {
-            verdictClass = 'overpriced';
-            verdictText = 'Pahalı';
-        } else if (priceVerdict === 'underpriced') {
-            verdictClass = 'underpriced';
-            verdictText = 'Ucuz';
-        }
-
-        const isSaved = savedIds.has(listing.id);
-        const isComparing = compareIds.has(listing.id);
-        return `
-            <article class="listing-card glass">
-                <button class="save-btn ${isSaved ? 'is-saved' : ''}" type="button"
-                        title="${isSaved ? 'Kaydedildi' : 'Kaydet'}"
-                        onclick="event.stopPropagation(); toggleSave(${listing.id}, this)">${isSaved ? '❤️' : '🤍'}</button>
-                <button class="compare-btn ${isComparing ? 'is-comparing' : ''}" type="button"
-                        id="cmp-${listing.id}"
-                        title="${isComparing ? 'Karşılaştırmadan çıkar' : 'Karşılaştır'}"
-                        onclick="event.stopPropagation(); toggleCompare(${listing.id}, this)">⚖️</button>
-                <div class="listing-header">
-                    <h3 class="listing-title">${listing.title || 'Untitled'}</h3>
-                    <span class="listing-source ${sourceClass}">${sourceLabel}</span>
-                </div>
-
-                <div class="listing-body">
-                    <div class="listing-price">
-                        <span class="price-value">₺${priceValue.toLocaleString('tr-TR')}</span>
-                        <span class="badge badge-${verdictClass}">${verdictText}</span>
-                    </div>
-
-                    <div class="listing-meta">
-                        <div class="meta-item">
-                            <span class="meta-icon">📍</span>
-                            <span class="meta-text">${listing.district || 'Unknown'}</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-icon">📐</span>
-                            <span class="meta-text">${listing.area_m2 || '-'} m²</span>
-                        </div>
-                        <div class="meta-item">
-                            <span class="meta-icon">🏠</span>
-                            <span class="meta-text">${listing.room_count_total || '-'} oda</span>
-                        </div>
-                    </div>
-
-                    <div class="listing-lifestyle">
-                        <span class="lifestyle-label">Yaşam Kalitesi</span>
-                        ${lifestyleScore === null ? '<span class="lifestyle-pill">Veri yok</span>' : `<span class="lifestyle-pill">${lifestyleScore.toFixed(1)}/10</span>`}
-                    </div>
-                </div>
-
-                <div class="listing-footer">
-                    <button class="btn btn-small" type="button" onclick="goToAnalyze(${listing.id})">
-                        <span>📊 Analiz Et</span>
-                    </button>
-                </div>
-            </article>
-        `;
-    }
-
-    // ---- Chatbot ----
-    function initChat() {
-        const toggle = document.getElementById('chatToggle');
-        const panel = document.getElementById('chatPanel');
-        const close = document.getElementById('chatClose');
-        const form = document.getElementById('chatForm');
-        const input = document.getElementById('chatInput');
-
-        toggle.addEventListener('click', () => {
-            panel.hidden = !panel.hidden;
-            if (!panel.hidden && !document.getElementById('chatLog').hasChildNodes()) {
-                appendChat('bot', "Merhaba! Nasıl bir ev arıyorsun? Bütçe, oda sayısı, semt veya tarz (sakin / merkezi / lüks) yazabilirsin.");
-            }
-        });
-        close.addEventListener('click', () => { panel.hidden = true; });
-
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const text = input.value.trim();
-            if (!text) return;
-            appendChat('user', text);
-            input.value = '';
-            const typing = appendChat('bot', 'Yazıyor…', { typing: true });
-            try {
-                const res = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, user_id: USER_ID }),
-                });
-                const data = await res.json();
-                typing.remove();
-                appendChat('bot', data.reply || '...');
-                applyChatFilters(data.filters || {});
-                trackBehaviorFromChat(text);
-            } catch (err) {
-                typing.remove();
-                appendChat('bot', 'Bir hata oldu, tekrar dener misin?');
-            }
-        });
-    }
-
-    function appendChat(who, text, opts = {}) {
-        const log = document.getElementById('chatLog');
-        const el = document.createElement('div');
-        el.className = `chat-msg ${who}` + (opts.typing ? ' typing' : '');
-        el.innerHTML = renderMarkdownLite(text);
-        log.appendChild(el);
-        log.scrollTop = log.scrollHeight;
-        return el;
-    }
-
-    function renderMarkdownLite(text) {
-        const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return escaped
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\n/g, '<br>');
-    }
-
-    function applyChatFilters(filters) {
-        activeChatFilters = filters;
-        renderFilterChips();
-        loadListings(1).then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
-    }
-
-    function renderFilterChips() {
-        const bar = document.getElementById('chatFiltersBar');
-        const chips = [];
-        const f = activeChatFilters;
-        if (f.district) chips.push(`📍 ${f.district}`);
-        if (f.min_rooms || f.max_rooms) {
-            const r = f.min_rooms === f.max_rooms ? f.min_rooms : `${f.min_rooms || 0}-${f.max_rooms || '∞'}`;
-            chips.push(`🛏️ ${r} oda`);
-        }
-        if (f.max_price) chips.push(`💸 ≤ ₺${Number(f.max_price).toLocaleString('tr-TR')}`);
-        if (f.min_price) chips.push(`💸 ≥ ₺${Number(f.min_price).toLocaleString('tr-TR')}`);
-        if (f.min_area) chips.push(`📐 ≥ ${f.min_area} m²`);
-        if (chips.length === 0) {
-            bar.hidden = true;
-            bar.innerHTML = '';
-            return;
-        }
-        bar.hidden = false;
-        bar.innerHTML = chips.map(c => `<span class="chip">${c}</span>`).join('') +
-            `<button type="button" class="chip clear-chip" onclick="clearChatFilters()">Temizle ×</button>`;
-    }
-
-    function clearChatFilters() {
-        activeChatFilters = {};
-        renderFilterChips();
-        loadListings(1);
-    }
-
-    function trackBehaviorFromChat(text) {
-        return; // Stopped logging user activity history
-    }
-
-    function goToAnalyze(listingId) {
-        // Stopped logging user activity history
-        window.location.href = `/analyze?listing_id=${listingId}`;
-    }
-</script>
-{% endblock %}
-}
 
 .listing-footer {
 justify-content: flex-end;
@@ -925,6 +402,37 @@ background: rgba(220, 38, 38, 0.18);
 color: #fecaca;
 }
 
+.listing-scores-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.50rem;
+    margin-top: 0.50rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    padding-top: 0.75rem;
+}
+
+.listing-match {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.match-label {
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.match-pill {
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    background: rgba(99, 102, 241, 0.18);
+    border: 1px solid rgba(99, 102, 241, 0.35);
+    color: #e0e7ff;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
 @media (max-width: 720px) {
 .listings-controls {
 grid-template-columns: 1fr;
@@ -932,7 +440,8 @@ grid-template-columns: 1fr;
 
 .listing-header,
 .listing-footer,
-.listing-lifestyle {
+.listing-lifestyle,
+.listing-match {
 flex-direction: column;
 }
 }
@@ -961,8 +470,21 @@ flex-direction: column;
             document.getElementById('searchInput').value = urlSearch;
         }
 
+        // Load active filters from localStorage if they exist
+        const savedFilters = localStorage.getItem('emlakai_active_chat_filters');
+        if (savedFilters) {
+            try {
+                activeChatFilters = JSON.parse(savedFilters);
+            } catch (e) {
+                console.error("Failed to parse saved filters", e);
+            }
+        }
+
         await loadSavedIds();
         await loadListings(1);
+
+        // Render filter chips after listings have initialized so that the UI is in sync
+        renderFilterChips();
 
         // Server-side search: debounce and reload from API
         document.getElementById('searchInput').addEventListener('input', () => {
@@ -1039,8 +561,10 @@ flex-direction: column;
         if (sortBy && sortBy !== 'recent') params.set('sort_by', sortBy);
 
         for (const [k, v] of Object.entries(activeChatFilters)) {
-            if (v === null || v === undefined || v === '' || Array.isArray(v)) continue;
+            if (v === null || v === undefined || v === '') continue;
             if (k === 'sort_by') params.set('sort_by', v);
+            else if (k === 'keywords' && Array.isArray(v)) params.set('keywords', v.join(','));
+            else if (Array.isArray(v)) continue;
             else params.set(k, v);
         }
         return params.toString();
@@ -1369,9 +893,17 @@ flex-direction: column;
                         </div>
                     </div>
 
-                    <div class="listing-lifestyle">
-                        <span class="lifestyle-label">Yaşam Kalitesi</span>
-                        ${lifestyleScore === null ? '<span class="lifestyle-pill">Veri yok</span>' : `<span class="lifestyle-pill">${lifestyleScore.toFixed(1)}/10</span>`}
+                    <div class="listing-scores-container">
+                        <div class="listing-lifestyle">
+                            <span class="lifestyle-label">🌿 Yaşam Kalitesi</span>
+                            ${lifestyleScore === null ? '<span class="lifestyle-pill">Veri yok</span>' : `<span class="lifestyle-pill">${lifestyleScore.toFixed(1)}/10</span>`}
+                        </div>
+                        ${listing.match_score !== null && listing.match_score !== undefined ? `
+                        <div class="listing-match">
+                            <span class="match-label">🎯 Uyum Skoru</span>
+                            <span class="match-pill">${listing.match_score.toFixed(1)}/10</span>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -1420,6 +952,10 @@ flex-direction: column;
                 const data = await res.json();
                 typing.remove();
                 appendChat('bot', data.reply || '...');
+
+                if (data.filters) {
+                    applyChatFilters(data.filters);
+                }
 
                 if (data.intent === 'navigate') {
                     if (data.target && window.currentRankedIds[data.target - 1]) {
@@ -1489,12 +1025,14 @@ flex-direction: column;
 
     function applyChatFilters(filters) {
         activeChatFilters = filters;
+        localStorage.setItem('emlakai_active_chat_filters', JSON.stringify(filters));
         renderFilterChips();
         loadListings(1).then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
     }
 
     function renderFilterChips() {
         const bar = document.getElementById('chatFiltersBar');
+        if (!bar) return;
         const chips = [];
         const f = activeChatFilters;
         if (f.district) chips.push(`📍 ${f.district}`);
@@ -1517,6 +1055,7 @@ flex-direction: column;
 
     function clearChatFilters() {
         activeChatFilters = {};
+        localStorage.removeItem('emlakai_active_chat_filters');
         renderFilterChips();
         loadListings(1);
     }

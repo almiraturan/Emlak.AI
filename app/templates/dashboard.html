@@ -44,82 +44,97 @@
     </svg>
 
     <!-- Hero Section -->
-    <section class="hero-v2">
+    <section class="hero-v2" style="padding-bottom: 2rem;">
         <div class="hero-v2-inner">
-            <span class="hero-eyebrow" style="color: #7a7a8a; letter-spacing: 0.15em;">AI Odaklı Gayrimenkul</span>
-            <h1 class="hero-main-title">
+            <span class="hero-eyebrow" style="color: #7a7a8a; letter-spacing: 0.15em;">AI ODAKLI GAYRİMENKUL</span>
+            <h1 class="hero-main-title" style="margin-bottom: 0.25rem;">
                 Hayalinizdeki Evi<br>
-                <span class="highlight-gold" style="background: linear-gradient(135deg, #f5deb3 0%, #fde68a 50%, #c9a227 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: inline-block;">AI ile Bulun</span>
+                <span class="highlight-cyan" style="background: linear-gradient(135deg, #2dd4bf 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; display: inline-block; text-shadow: 0 0 20px rgba(6,182,212,0.15);">AI ile Bulun</span>
             </h1>
-            <p class="hero-subtitle" style="color: #7a7a8a; font-size: 0.92rem; max-width: 520px; line-height: 1.6; margin-top: 0.5rem; text-align: center;">Türkiye'nin en akıllı emlak arama platformu — fiyat analizi, yaşam kalitesi skoru ve kişisel öneriler.</p>
+            <p class="hero-subtitle" style="color: #7a7a8a; font-size: 0.92rem; max-width: 520px; line-height: 1.6; margin-top: 0.5rem; text-align: center;">Ne aradığını yaz, yapay zeka sana en uygun ilanları bulsun.</p>
 
-            <div class="hero-search-wrap" style="margin-top: 1rem; width: 100%; max-width: 560px;">
-                <div class="hero-search-bar">
-                    <span class="hero-search-icon">📍</span>
-                    <input type="text" id="heroSearch" class="hero-search-input" placeholder="Şehir, ilçe ya da mahalle ara...">
-                    <button class="hero-search-btn" onclick="handleHeroSearch()">Ara</button>
+            <!-- Chatbot Window Integration -->
+            <div class="dashboard-chat-window glass">
+                <div class="dash-chat-header">
+                    <div class="dash-chat-avatar">
+                        <span class="avatar-icon">🤖</span>
+                    </div>
+                    <div class="dash-chat-info">
+                        <strong class="dash-chat-title">Emlak Asistanı</strong>
+                        <span class="dash-chat-status"><span class="status-green-dot"></span> Çevrimiçi</span>
+                    </div>
                 </div>
-                <div class="hero-chips">
-                    <button class="hero-chip" onclick="setHeroSearch('Kadıköy')">Kadıköy</button>
-                    <button class="hero-chip" onclick="setHeroSearch('Beşiktaş')">Beşiktaş</button>
-                    <button class="hero-chip" onclick="setHeroSearch('3+1')">3+1</button>
-                    <button class="hero-chip" onclick="setHeroSearch('İstanbul')">İstanbul</button>
-                    <button class="hero-chip" onclick="setHeroSearch('Ataşehir')">Ataşehir</button>
+                <div class="dash-chat-body" id="dashChatLog">
+                    <!-- Loaded dynamically via js -->
                 </div>
+                <form class="dash-chat-form" id="dashChatForm">
+                    <input type="text" id="dashChatInput" class="dash-chat-input" placeholder="ör. Ankara'da 3+1, köpek dostu, sakin yer" autocomplete="off" required>
+                    <button type="submit" class="dash-chat-submit">Gönder</button>
+                </form>
+            </div>
+
+            <!-- Suggestion Chips -->
+            <div class="dash-chips-wrap">
+                <button class="dash-chip" onclick="submitDashQuery('Kadıköy 2+1')">Kadıköy 2+1</button>
+                <button class="dash-chip" onclick="submitDashQuery('Ankara 4+1')">Ankara 4+1</button>
+                <button class="dash-chip" onclick="submitDashQuery('Köpek Dostu')">Köpek Dostu</button>
+                <button class="dash-chip" onclick="submitDashQuery('Beşiktaş 3+1')">Beşiktaş 3+1</button>
+                <button class="dash-chip" onclick="submitDashQuery('Yaşam Skoru Yüksek')">Yaşam Skoru Yüksek</button>
             </div>
         </div>
     </section>
 
     <!-- AI Features Section -->
-    <section class="features-section">
+    <section class="features-section" style="margin-top: 1rem; padding-top: 1rem;">
         <h2 class="features-title">AI Özellikleri</h2>
         <div class="feature-cards">
 
-            <div class="feature-card glass">
+            <div class="feature-card glass" style="min-height: auto; padding: 1.5rem;">
                 <div class="feature-card-content">
-                    <div class="feature-icon fi-price" style="color: var(--amber-light);">📊</div>
-                    <h3 class="feature-name">Fiyat Analizi</h3>
-                    <p class="feature-desc">XGBoost ile değer tahmini. Overpriced / fair / underpriced verir.</p>
-                </div>
-                <div class="feature-card-preview">
-                    <img src="/static/images/fiyat_analizi_preview.png" alt="Fiyat Analizi">
-                </div>
-            </div>
-
-            <div class="feature-card glass">
-                <div class="feature-card-content">
-                    <div class="feature-icon fi-lifestyle" style="color: var(--teal-light);">🌿</div>
+                    <div class="feature-icon fi-lifestyle" style="color: #2dd4bf; background: rgba(45, 212, 191, 0.1); border: 1px solid rgba(45, 212, 191, 0.25); border-radius: 8px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.75rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                        </svg>
+                    </div>
                     <h3 class="feature-name">Yaşam Skoru</h3>
                     <p class="feature-desc">Çevredeki okul, hastane, metro ve park verisiyle 1–10 skor.</p>
                 </div>
-                <div class="feature-card-preview">
-                    <img src="/static/images/yasam_skoru_preview.png" alt="Yaşam Skoru">
-                </div>
             </div>
 
-            <div class="feature-card glass" style="position: relative;">
-                <!-- Cross decorations near Akıllı Öneri -->
-                <span class="cross-decor cross-decor-1">+</span>
-                <span class="cross-decor cross-decor-2">+</span>
+            <div class="feature-card glass" style="min-height: auto; padding: 1.5rem;">
                 <div class="feature-card-content">
-                    <div class="feature-icon fi-rec" style="color: #a855f7;">✨</div>
-                    <h3 class="feature-name">Akıllı Öneri</h3>
-                    <p class="feature-desc">Davranışınıza göre SVD ile kişiselleştirilmiş ilan önerileri.</p>
-                </div>
-                <div class="feature-card-preview">
-                    <img src="/static/images/akilli_oneri_preview.png" alt="Akıllı Öneri">
+                    <div class="feature-icon fi-pets" style="color: #06b6d4; background: rgba(6, 182, 212, 0.1); border: 1px solid rgba(6, 182, 212, 0.25); border-radius: 8px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.75rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="20" x2="18" y2="10"/>
+                            <line x1="12" y1="20" x2="12" y2="4"/>
+                            <line x1="6" y1="20" x2="6" y2="14"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-name">Köpek Dostu</h3>
+                    <p class="feature-desc">Evcil hayvan dostu çevre ve park analizleri.</p>
                 </div>
             </div>
 
-        </div>
-    </section>
+            <div class="feature-card glass" style="min-height: auto; padding: 1.5rem;">
+                <div class="feature-card-content">
+                    <div class="feature-icon fi-emlakai" style="color: #c084fc; background: rgba(168, 85, 247, 0.1); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: 8px; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.75rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="3"/>
+                            <circle cx="19" cy="5" r="2"/>
+                            <circle cx="5" cy="19" r="2"/>
+                            <circle cx="19" cy="19" r="2"/>
+                            <circle cx="5" cy="5" r="2"/>
+                            <line x1="7" y1="7" x2="10.5" y2="10.5"/>
+                            <line x1="17" y1="17" x2="13.5" y2="13.5"/>
+                            <line x1="17" y1="7" x2="13.5" y2="10.5"/>
+                            <line x1="7" y1="17" x2="10.5" y2="13.5"/>
+                        </svg>
+                    </div>
+                    <h3 class="feature-name">Emlak AI</h3>
+                    <p class="feature-desc">Yapay zeka ile en uygun ilan eşleştirmeleri.</p>
+                </div>
+            </div>
 
-    <!-- CTA Buttons -->
-    <section class="cta-section">
-        <div class="cta-row">
-            <a href="/listings" class="btn-cta btn-cta-green">🏠 Tüm İlanları Gör</a>
-            <a href="#" class="btn-cta btn-cta-purple" id="chatCta">💬 AI ile Sohbet Et</a>
-            <a href="/analyze" class="btn-cta btn-cta-amber">✨ AI Analizi Başla</a>
         </div>
     </section>
 
@@ -128,49 +143,88 @@
 
 {% block extra_js %}
 <script>
-    function handleHeroSearch() {
-        const q = document.getElementById('heroSearch').value.trim();
-        if (q) window.location.href = '/listings?search=' + encodeURIComponent(q);
-        else window.location.href = '/listings';
+    const USER_ID = localStorage.getItem('emlakai_user_id') || 1;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // Clear active filters when loading dashboard for the first time
+        // so we start with a fresh state unless they specifically query.
+        localStorage.removeItem('emlakai_active_chat_filters');
+        
+        appendDashChat('bot', "Merhaba! Ben EmlakAI. Sana en uygun evi bulmana yardım edebilirim. Hangi şehirde, kaç odalı, bütçen ne kadar?");
+
+        document.getElementById('dashChatForm').addEventListener('submit', handleDashChatSubmit);
+    });
+
+    function appendDashChat(who, text, opts = {}) {
+        const log = document.getElementById('dashChatLog');
+        if (!log) return;
+        const el = document.createElement('div');
+        el.className = `dash-chat-msg ${who}`;
+        
+        // Simple markdown parsing
+        let parsedText = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\n/g, '<br>');
+
+        el.innerHTML = parsedText;
+        log.appendChild(el);
+        log.scrollTop = log.scrollHeight;
+        return el;
     }
 
-    function setHeroSearch(val) {
-        document.getElementById('heroSearch').value = val;
-        handleHeroSearch();
+    async function handleDashChatSubmit(e) {
+        if (e) e.preventDefault();
+        const input = document.getElementById('dashChatInput');
+        const text = input.value.trim();
+        if (!text) return;
+
+        appendDashChat('user', text);
+        input.value = '';
+
+        const typing = appendDashChat('bot', 'Yazıyor…');
+
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: text, user_id: USER_ID }),
+            });
+            if (!res.ok) throw new Error('Cevap alınamadı');
+            const data = await res.json();
+            typing.remove();
+            
+            appendDashChat('bot', data.reply || '...');
+            
+            if (data.filters) {
+                // Save filters to localStorage so Listings page can pick them up
+                localStorage.setItem('emlakai_active_chat_filters', JSON.stringify(data.filters));
+            }
+
+            if (data.total_matched !== undefined) {
+                const total = data.total_matched;
+                if (total > 0) {
+                    appendDashChat('system', `
+                        <div style="text-align: center; display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
+                            <span style="font-size: 0.85rem; color: #ffffff;">🔍 Kriterlerinize uygun <strong>${total}</strong> ilan bulundu!</span>
+                            <button class="dash-chat-submit" style="padding: 0.45rem 1rem; font-size: 0.82rem; font-weight: 600; width: 100%; border: none;" onclick="window.location.href='/listings'">🔍 İlanları Listele</button>
+                        </div>
+                    `);
+                } else {
+                    appendDashChat('system', `😔 Kriterlere uygun ilan bulunamadı. Lütfen bütçenizi veya konum tercihlerinizi esnetin.`);
+                }
+            }
+        } catch (err) {
+            typing.remove();
+            appendDashChat('bot', 'Bir hata oluştu, lütfen tekrar deneyin.');
+        }
     }
 
-    document.getElementById('heroSearch').addEventListener('keydown', e => {
-        if (e.key === 'Enter') handleHeroSearch();
-    });
-
-    document.getElementById('chatCta').addEventListener('click', e => {
-        e.preventDefault();
-        if (typeof openChat === 'function') openChat();
-        else window.location.href = '/listings';
-    });
-
-    // Navbar status
-    document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            const r = await fetch('/api/agents/profile/1');
-            updateStatusIndicator('backendStatus', r.ok);
-        } catch { updateStatusIndicator('backendStatus', false); }
-
-        try {
-            const r = await fetch('http://localhost:11434/api/tags');
-            updateStatusIndicator('ollamaStatus', r.ok);
-        } catch { updateStatusIndicator('ollamaStatus', false); }
-
-        setInterval(async () => {
-            try { updateStatusIndicator('backendStatus', (await fetch('/api/agents/profile/1')).ok); } catch { updateStatusIndicator('backendStatus', false); }
-            try { updateStatusIndicator('ollamaStatus', (await fetch('http://localhost:11434/api/tags')).ok); } catch { updateStatusIndicator('ollamaStatus', false); }
-        }, 5000);
-    });
-
-    function updateStatusIndicator(id, active) {
-        const dot = document.getElementById(id)?.querySelector('.status-dot');
-        if (!dot) return;
-        dot.classList.toggle('active', active);
+    function submitDashQuery(val) {
+        const input = document.getElementById('dashChatInput');
+        if (input) {
+            input.value = val;
+            handleDashChatSubmit();
+        }
     }
 </script>
 {% endblock %}

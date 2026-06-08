@@ -201,6 +201,17 @@
                         <span class="poi-name">Okullar</span>
                         <span class="poi-count" id="schoolCount">-</span>
                         <span class="poi-distance" id="schoolDistance">-</span>
+                        
+                        <!-- Filter chips for school type -->
+                        <div class="school-filters" style="width: 100%; display: flex; gap: 0.35rem; flex-wrap: wrap; margin: 0.45rem 0 0.2rem 0;">
+                            <button class="school-filter-btn active" onclick="filterSchoolType('Hepsi')" style="background: rgba(16,185,129,0.18); border: 1px solid rgba(16,185,129,0.4); color: #6ee7b7; border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Hepsi</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('İlkokul')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">İlkokul</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Ortaokul')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Ortaokul</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Bakımevi')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Bakımevi</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Lise')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Lise</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Üniversite')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Üniversite</button>
+                        </div>
+
                         <span class="poi-list" id="schoolNames">-</span>
                     </div>
                     <div class="poi-item" id="poiHospital">
@@ -288,6 +299,48 @@
     let currentListingId = null;
 
     let allListingsForSelection = [];
+    let currentSchoolDetails = [];
+
+    function filterSchoolType(type) {
+        const buttons = document.querySelectorAll('.school-filter-btn');
+        buttons.forEach(btn => {
+            if (btn.textContent.trim() === type) {
+                btn.style.background = 'rgba(16,185,129,0.18)';
+                btn.style.borderColor = 'rgba(16,185,129,0.4)';
+                btn.style.color = '#6ee7b7';
+                btn.classList.add('active');
+            } else {
+                btn.style.background = 'rgba(255,255,255,0.04)';
+                btn.style.borderColor = 'rgba(255,255,255,0.08)';
+                btn.style.color = 'var(--text-muted)';
+                btn.classList.remove('active');
+            }
+        });
+
+        let filtered = currentSchoolDetails;
+        if (type !== 'Hepsi') {
+            filtered = currentSchoolDetails.filter(s => s.category === type);
+        }
+
+        document.getElementById('schoolCount').textContent = filtered.length;
+        
+        if (filtered.length === 0) {
+            document.getElementById('schoolNames').textContent = '-';
+        } else {
+            document.getElementById('schoolNames').textContent = filtered.map(s => s.name).join(', ');
+        }
+
+        const distances = filtered.map(s => s.distance_km).filter(d => d !== null && d !== undefined);
+        const minDistance = distances.length > 0 ? Math.min(...distances) : null;
+        
+        const formatDistance = (value) => {
+            if (value === null || value === undefined) {
+                return '-';
+            }
+            return `${Number(value).toFixed(2)} km`;
+        };
+        document.getElementById('schoolDistance').textContent = `En yakin: ${formatDistance(minDistance)}`;
+    }
 
     document.addEventListener('DOMContentLoaded', async () => {
         const activeName = localStorage.getItem('emlakai_user_name') || 'Almira';
@@ -493,12 +546,36 @@
                 return `${Number(value).toFixed(2)} km`;
             };
 
-            document.getElementById('schoolCount').textContent = pois.school || 0;
+            // Store and process school details for interactive filter
+            if (data.lifestyle.school_details) {
+                currentSchoolDetails = data.lifestyle.school_details;
+            } else if (names.school) {
+                currentSchoolDetails = names.school.map(name => {
+                    let category = 'Diğer';
+                    const lower = name.toLowerCase();
+                    if (lower.includes('ilkokul') || lower.includes('ilköğretim') || lower.includes('ilkogretim')) category = 'İlkokul';
+                    else if (lower.includes('ortaokul')) category = 'Ortaokul';
+                    else if (lower.includes('lise')) category = 'Lise';
+                    else if (lower.includes('anaokulu') || lower.includes('bakımevi') || lower.includes('kreş') || lower.includes('gündüz bakım') || lower.includes('gunduz bakim') || lower.includes('kindergarten') || lower.includes('daycare')) category = 'Bakımevi';
+                    else if (lower.includes('üniversite') || lower.includes('universite') || lower.includes('university') || lower.includes('kampüs') || lower.includes('kampus')) category = 'Üniversite';
+                    
+                    return {
+                        name: name,
+                        category: category,
+                        distance_km: distances.school
+                    };
+                });
+            } else {
+                currentSchoolDetails = [];
+            }
+
+            // Initially display all schools ("Hepsi" filter)
+            filterSchoolType('Hepsi');
+
             document.getElementById('hospitalCount').textContent = pois.hospital || 0;
             document.getElementById('transitCount').textContent = (pois.bus || 0) + (pois.subway || 0);
             document.getElementById('parkCount').textContent = pois.park || 0;
 
-            document.getElementById('schoolDistance').textContent = `En yakin: ${formatDistance(distances.school)}`;
             document.getElementById('hospitalDistance').textContent = `En yakin: ${formatDistance(distances.hospital)}`;
             const transitNearest = [distances.bus, distances.subway]
                 .filter((v) => v !== null && v !== undefined)
@@ -514,7 +591,6 @@
             };
 
             const transitNames = [...new Set([...(names.bus || []), ...(names.subway || [])])];
-            document.getElementById('schoolNames').textContent = formatNames(names.school);
             document.getElementById('hospitalNames').textContent = formatNames(names.hospital);
             document.getElementById('transitNames').textContent = formatNames(transitNames);
             document.getElementById('parkNames').textContent = formatNames(names.park);

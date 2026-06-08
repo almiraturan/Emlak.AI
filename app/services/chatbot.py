@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.agents.base import BaseAgent
 from app.models.listing import Listing
+from app.services.recommendation_service import calculate_compatibility_score
 
 logger = logging.getLogger(__name__)
 
@@ -219,13 +220,27 @@ def parse_message(message: str) -> ChatFilters:
     # --- Children (number-aware) ---
     # "3 çocuğum", "iki tane çocuk", "birkaç çocuk", "çocuklarım var"
     n_kids = None
-    child_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:cocuk|kiz|oglan|bebek|torun|cocugum|cocuklarim)", text)
-    if child_m:
-        n_kids = _parse_num(child_m.group(1)) or 1
-    elif re.search(r"birka[c]\s*(?:tane\s*)?(?:cocuk|kiz|torun)", text):
-        n_kids = 2
-    elif re.search(r"(?:cocugum|cocuklarim|kucuk cocuklar?)\s*var", text):
-        n_kids = 1
+    child_matches = re.findall(_NUM_PAT + r"\s*(?:tane\s*)?(?:cocuk|kiz|oglan|oglu|ogul|bebek|torun|cocugum|cocuklarim|evlat)", text)
+    if child_matches:
+        n_kids = sum(_parse_num(m) or 1 for m in child_matches)
+    else:
+        # Check for individual singular child mentions without numbers, e.g. "kızım ve oğlum var"
+        singular_mentions = 0
+        if re.search(r"\b(?:kizim|kizi)\b", text):
+            singular_mentions += 1
+        if re.search(r"\b(?:oglum|oglu)\b", text):
+            singular_mentions += 1
+        if re.search(r"\b(?:cocugum|cocugu)\b", text):
+            singular_mentions += 1
+        if re.search(r"\b(?:bebegim|bebegi)\b", text):
+            singular_mentions += 1
+        
+        if singular_mentions > 0:
+            n_kids = singular_mentions
+        elif re.search(r"birka[c]\s*(?:tane\s*)?(?:cocuk|kiz|torun)", text):
+            n_kids = 2
+        elif re.search(r"(?:cocugum|cocuklarim|kucuk cocuklar?)\s*var", text):
+            n_kids = 1
 
     if n_kids is not None:
         if f.min_rooms is None or f.min_rooms < n_kids:
@@ -253,10 +268,10 @@ def parse_message(message: str) -> ChatFilters:
             f.context = "family"
 
     # --- Elderly care (number-aware) ---
-    # "2 yaşlı", "annem babam için", "büyükannem var"
+    # "2 yaşlı", "annem babam için", "büyükannem var", "yatalak annem"
     elderly_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:yasli|emekli|buyukanne|buyukbaba|nine|dede)", text)
     has_elderly_rel = bool(re.search(
-        r"(?:annem|babam|annemin|babamin|anne.*baba|baba.*anne|buyukanne|buyukbaba|nine|dedem)",
+        r"(?:annem|babam|annemin|babamin|anne.*baba|baba.*anne|buyukanne|buyukbaba|nine|dedem|yatalak)",
         text,
     ))
     if elderly_m or has_elderly_rel:
@@ -348,6 +363,62 @@ def parse_message(message: str) -> ChatFilters:
     return f
 
 
+def sort_listings_by_poi_distance(listings: list[Listing], poi_type: str, lat: float, lon: float) -> list[Listing]:
+    """Fetch POIs of type (hospital or school) around the center and sort listings by distance to the closest POI."""
+    if not listings:
+        return listings
+        
+    if poi_type == "hospital":
+        overpass_filter = '"amenity"="hospital"'
+    elif poi_type == "school":
+        overpass_filter = '"amenity"~"school|university|college|kindergarten"'
+    else:
+        return listings
+
+    query = (
+        "[out:json][timeout:15];"
+        f"(nwr[{overpass_filter}](around:5000,{lat},{lon}););"
+        "out center qt;"
+    )
+    
+    import httpx
+    try:
+        response = httpx.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query},
+            headers={"User-Agent": "EmlakAI/1.0"},
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            elements = data.get("elements", [])
+            
+            pois = []
+            for el in elements:
+                p_lat = el.get("lat")
+                p_lon = el.get("lon")
+                if (p_lat is None or p_lon is None) and isinstance(el.get("center"), dict):
+                    p_lat = el["center"].get("lat")
+                    p_lon = el["center"].get("lon")
+                if p_lat is not None and p_lon is not None:
+                    pois.append((p_lat, p_lon))
+            
+            if pois:
+                from app.services.recommendation_service import haversine_distance
+                
+                def get_min_dist(l):
+                    if l.latitude is None or l.longitude is None:
+                        return 999.0
+                    return min(haversine_distance(l.latitude, l.longitude, plat, plon) for plat, plon in pois)
+                
+                listings.sort(key=get_min_dist)
+                logger.info(f"Successfully sorted {len(listings)} listings by proximity to {poi_type}.")
+    except Exception as e:
+        logger.warning(f"Failed to sort listings by POI distance: {e}")
+        
+    return listings
+
+
 def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Listing]:
     q = db.query(Listing).filter(Listing.is_active.is_(True))
 
@@ -370,6 +441,23 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
     if filters.max_building_age is not None:
         q = q.filter(Listing.building_age <= filters.max_building_age)
 
+    # If the user has specific school or hospital requirements, fetch more candidates and sort by POI distance
+    is_hospital_req = filters.context == "elderly_care" or "hastane yakını" in filters.keywords
+    is_school_req = filters.context == "family_kids" or "okul yakını" in filters.keywords
+    
+    if is_hospital_req or is_school_req:
+        # Fetch up to 30 matching listings sorted by lifestyle score to run POI distance sorting on
+        candidates = q.order_by(desc(Listing.lifestyle_score)).limit(30).all()
+        valid_coords = [(c.latitude, c.longitude) for c in candidates if c.latitude and c.longitude]
+        if valid_coords:
+            center_lat = sum(x[0] for x in valid_coords) / len(valid_coords)
+            center_lon = sum(x[1] for x in valid_coords) / len(valid_coords)
+            
+            poi_type = "hospital" if is_hospital_req else "school"
+            candidates = sort_listings_by_poi_distance(candidates, poi_type, center_lat, center_lon)
+            return candidates[:limit]
+
+    # Standard sorting
     if filters.sort_by == "price_asc":
         q = q.order_by(asc(Listing.price))
     elif filters.sort_by == "price_desc":
@@ -465,9 +553,11 @@ def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total:
         verdict = {"underpriced": "ucuz", "fair": "adil", "overpriced": "pahalı"}.get(
             (l.price_verdict or "fair"), "adil"
         )
+        compat_score = calculate_compatibility_score(l, filters)
+        compat_str = f"uyum skoru {compat_score:.1f}/10 · " if compat_score is not None else ""
         lines.append(
             f"{i}. **{l.title}** — {_format_price(l.price)} · {l.area_m2:.0f} m² · "
-            f"{l.room_count_total} oda · yasam puani {score:.1f}/10 · fiyat {verdict}"
+            f"{l.room_count_total} oda · {compat_str}yasam puani {score:.1f}/10 · fiyat {verdict}"
         )
 
     lines.append(_contextual_explanation(filters.context, picks))
@@ -478,10 +568,13 @@ def _llm_explain(message: str, filters: ChatFilters, picks: list[Listing], total
     agent = BaseAgent()
     if not agent.is_ollama_available():
         return None
-    listings_text = "\n".join(
-        f"- {l.title}: {int(l.price)} TRY, {l.area_m2:.0f} m², {l.room_count_total} oda, {l.district}, yasam puani {l.lifestyle_score or 0:.1f}/10"
-        for l in picks
-    )
+    
+    def format_listing_for_llm(l):
+        cs = calculate_compatibility_score(l, filters)
+        cs_str = f", uyum skoru {cs:.1f}/10" if cs is not None else ""
+        return f"- {l.title}: {int(l.price)} TRY, {l.area_m2:.0f} m², {l.room_count_total} oda, {l.district}{cs_str}, yasam puani {l.lifestyle_score or 0:.1f}/10"
+
+    listings_text = "\n".join(format_listing_for_llm(l) for l in picks)
     prompt = (
         "Sen EmlakAI'nın akıllı asistanısın. Türkiye'deki emlak piyasası, "
         "ev satın alma süreci, fiyat analizi, mahalle karşılaştırması ve "

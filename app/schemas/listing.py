@@ -58,6 +58,7 @@ class ListingCardResponse(BaseModel):
     area_m2: float | None
     room_count_total: int | None
     lifestyle_score: float | None
+    match_score: float | None = None
     price_verdict: str | None
     source: str | None
     latitude: float | None

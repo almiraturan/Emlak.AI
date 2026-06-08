@@ -9,7 +9,7 @@ from app.models import User
 from app.models.listing import Listing
 from app.schemas.listing import ListingCardResponse, ListingListResponse, ListingResponse, ListingSelectorResponse
 from app.services.listing_service import get_listing_by_id
-from app.services.recommendation_service import calculate_match_score
+from app.services.recommendation_service import calculate_match_score, calculate_compatibility_score
 
 def canonicalize_turkish(text: str) -> str:
     if not text:
@@ -45,6 +45,8 @@ def read_listings(
     min_area: float | None = Query(default=None, ge=0),
     sort_by: str = Query(default="recent"),
     search: str | None = Query(default=None),
+    keywords: str | None = Query(default=None),
+    context: str | None = Query(default=None),
     user_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
@@ -129,6 +131,18 @@ def read_listings(
             .all()
         )
 
+    filters = {
+        "district": district,
+        "min_price": min_price,
+        "max_price": max_price,
+        "min_rooms": min_rooms,
+        "max_rooms": max_rooms,
+        "min_area": min_area,
+        "search": search,
+        "keywords": keywords,
+        "context": context,
+    }
+
     items = [
         ListingCardResponse(
             id=listing.id,
@@ -138,6 +152,7 @@ def read_listings(
             area_m2=listing.area_m2,
             room_count_total=listing.room_count_total,
             lifestyle_score=listing.lifestyle_score,
+            match_score=calculate_compatibility_score(listing, filters),
             price_verdict=listing.price_verdict,
             source=listing.source,
             latitude=listing.latitude,

@@ -24,7 +24,7 @@
         <div class="navbar-container">
             <div class="navbar-logo">
                 <a href="/">
-                    <span class="logo-icon">🏠</span>
+                    <div class="logo-box">E</div>
                     <span class="logo-text">EmlakAI</span>
                 </a>
             </div>
@@ -39,14 +39,17 @@
                 <li><a href="/profile"
                         class="nav-link {% if request.url.path == '/profile' %}active{% endif %}">Profilim</a></li>
             </ul>
-            <div style="display: flex; align-items: center; gap: 0.75rem;">
-                <div class="navbar-user-pill">
-                    <span style="font-size: 0.95rem;">👤</span>
+            <div class="navbar-actions">
+                <div class="navbar-user-dropdown" onclick="toggleDropdown(event)">
+                    <span style="font-size: 0.95rem; opacity: 0.85;">👤</span>
                     <span id="activeUserName">-</span>
+                    <span class="dropdown-arrow">∨</span>
+                    <div class="user-dropdown-menu" id="userDropdownMenu" hidden>
+                        <a href="/profile">👤 Profilim</a>
+                        <a href="/saved">❤️ Kaydedilen Evler</a>
+                        <a href="#" onclick="event.preventDefault(); logoutUser();" style="border-top: 1px solid rgba(255,255,255,0.06); color: #fca5a5;">🚪 Oturumu Kapat</a>
+                    </div>
                 </div>
-                <button onclick="logoutUser()" title="Oturumu Kapat" class="navbar-logout-btn">
-                    🚪
-                </button>
             </div>
         </div>
     </nav>
@@ -78,6 +81,25 @@
             const nameEl = document.getElementById('activeUserName');
             if (nameEl) {
                 nameEl.textContent = localStorage.getItem('emlakai_user_name') || 'Kullanıcı';
+            }
+        });
+
+        function toggleDropdown(event) {
+            if (event) event.stopPropagation();
+            const menu = document.getElementById('userDropdownMenu');
+            menu.hidden = !menu.hidden;
+            const arrow = document.querySelector('.dropdown-arrow');
+            if (arrow) {
+                arrow.style.transform = menu.hidden ? 'rotate(0deg)' : 'rotate(180deg)';
+            }
+        }
+
+        window.addEventListener('click', () => {
+            const menu = document.getElementById('userDropdownMenu');
+            if (menu && !menu.hidden) {
+                menu.hidden = true;
+                const arrow = document.querySelector('.dropdown-arrow');
+                if (arrow) arrow.style.transform = 'rotate(0deg)';
             }
         });
 
