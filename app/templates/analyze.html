@@ -79,12 +79,14 @@
     </section>
 
     <section class="analyze-inputs glass">
+        <div class="input-group">
+            <label>Kullanıcı</label>
             <div id="userInfo" style="font-weight: 600; color: var(--text); padding: 0.7rem 0.95rem; background: #0d0d14; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm);">Almira</div>
         </div>
         <div class="input-group" style="position: relative;">
             <label for="listingSelectSearch">İlan Seç</label>
             <input type="text" id="listingSelectSearch" class="modal-input" placeholder="İlan ara..." autocomplete="off">
-            <input type="hidden" id="selectedListingId" value="1">
+            <input type="hidden" id="listingId" value="">
             <div id="listingDropdownList" class="listing-dropdown-list glass" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; width: 100%; max-height: 250px; overflow-y: auto; z-index: 1000; border-radius: var(--radius-sm); background: rgba(10, 10, 15, 0.98); border: 1px solid var(--border-hover); box-shadow: var(--shadow-lg); padding: 0.5rem 0;">
                 <!-- Dinamik olarak doldurulur -->
             </div>
@@ -431,11 +433,9 @@
                     document.getElementById('listingSelectSearch').value = `İlan #${lid}`;
                 }
                 runFullAnalysis();
-            } else if (allListingsForSelection.length > 0) {
-                // Pre-select first listing
-                const first = allListingsForSelection[0];
-                document.getElementById('listingId').value = first.id;
-                document.getElementById('listingSelectSearch').value = first.title;
+            } else {
+                document.getElementById('listingId').value = "";
+                document.getElementById('listingSelectSearch').value = "";
             }
         } catch (err) {
             console.error('Listings selector error:', err);
@@ -517,7 +517,7 @@
 
     async function runFullAnalysis() {
         const userId = DEMO_USER_ID;
-        const listingId = selectedListingId || parseInt(document.getElementById('selectedListingId').value);
+        const listingId = parseInt(document.getElementById('listingId').value);
 
         if (!listingId) {
             showToast('Lütfen bir ilan seçin', 'error');
