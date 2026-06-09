@@ -113,3 +113,5 @@ class ListingListResponse(BaseModel):
 class ListingSelectorResponse(BaseModel):
     id: int
     title: str
+    city: str | None = None
+    district: str | None = None

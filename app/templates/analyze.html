@@ -123,9 +123,9 @@
     </div>
 
     <!-- Results -->
-    <div id="resultsContainer" class="results-container" style="display:none;">
+    <div id="resultsContainer" style="display:none;">
         <!-- Listing Header Card -->
-        <div class="result-card glass result-listing-header-card">
+        <div class="result-card glass result-listing-header-card" style="margin-bottom: 2rem;">
             <div>
                 <h2 id="listingTitle" style="margin: 0; font-size: 1.8rem; color: #fff;">-</h2>
                 <p id="listingLocationAndPrice" style="margin: 0.5rem 0 0 0; color: rgba(255, 255, 255, 0.7); font-size: 1.05rem;">-</p>
@@ -133,8 +133,9 @@
             <button id="detailSaveBtn" class="detail-save-btn" type="button" title="Kaydet" onclick="toggleDetailSave()">🤍</button>
         </div>
 
-        <!-- Profile Result -->
-        <div class="result-card glass result-profile">
+        <div class="results-container">
+            <!-- Profile Result -->
+            <div class="result-card glass result-profile">
             <div class="result-header">
                 <h2>Kullanıcı Profili</h2>
                 <span class="result-badge profile">Profile</span>
@@ -295,9 +296,10 @@
                 </div>
             </div>
         </div>
+        </div> <!-- End of results-container grid -->
 
         <!-- Duration -->
-        <div class="result-duration">
+        <div class="result-duration" style="margin-top: 2rem;">
             <span>Toplam analiz süresi: <strong id="analysisDuration">-</strong> ms</span>
         </div>
     </div>
@@ -445,13 +447,29 @@
         const dropdownList = document.getElementById('listingDropdownList');
         const hiddenInput = document.getElementById('listingId');
 
+        function cleanStr(str) {
+            if (!str) return '';
+            return str.toString().toLowerCase()
+                .replace(/ı/g, 'i')
+                .replace(/ş/g, 's')
+                .replace(/ğ/g, 'g')
+                .replace(/ü/g, 'u')
+                .replace(/ö/g, 'o')
+                .replace(/ç/g, 'c');
+        }
+
         function filterAndShowDropdown() {
-            const query = searchInput.value.toLowerCase().trim();
+            const rawQuery = searchInput.value.trim();
+            const query = cleanStr(rawQuery);
             dropdownList.innerHTML = '';
             
-            const filtered = allListingsForSelection.filter(l => 
-                l.title.toLowerCase().includes(query) || l.id.toString() === query
-            );
+            const filtered = allListingsForSelection.filter(l => {
+                const title = cleanStr(l.title);
+                const city = cleanStr(l.city);
+                const district = cleanStr(l.district);
+                const id = l.id ? l.id.toString() : '';
+                return title.includes(query) || city.includes(query) || district.includes(query) || id === query;
+            });
 
             if (filtered.length === 0) {
                 dropdownList.innerHTML = '<div class="listing-dropdown-no-results">Arama sonucu bulunamadı</div>';
@@ -459,7 +477,8 @@
                 filtered.forEach(l => {
                     const item = document.createElement('div');
                     item.className = 'listing-dropdown-item' + (hiddenInput.value == l.id ? ' selected' : '');
-                    item.textContent = l.title;
+                    const locationSuffix = (l.district && l.city) ? ` (${l.district}, ${l.city})` : '';
+                    item.textContent = l.title + locationSuffix;
                     item.onclick = () => {
                         hiddenInput.value = l.id;
                         searchInput.value = l.title;

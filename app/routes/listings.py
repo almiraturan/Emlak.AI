@@ -212,7 +212,7 @@ def search_listings(
 def get_listings_selector(db: Session = Depends(get_db)):
     """Get all active listings for selection dropdown."""
     listings = db.query(Listing).filter(Listing.is_active.is_(True)).order_by(Listing.title.asc()).all()
-    return [{"id": l.id, "title": l.title} for l in listings]
+    return [{"id": l.id, "title": l.title, "city": l.city, "district": l.district} for l in listings]
 
 
 @router.get("/listings/{listing_id}", response_model=ListingResponse)
