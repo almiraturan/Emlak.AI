@@ -182,6 +182,18 @@ def saved_page(request: Request):
     return templates.TemplateResponse("saved.html", {"request": request})
 
 
+@app.get("/profile")
+def profile_page(request: Request):
+    """Render profile page"""
+    return templates.TemplateResponse("profile.html", {"request": request})
+
+
+@app.get("/login")
+def login_page(request: Request):
+    """Render login page"""
+    return templates.TemplateResponse("login.html", {"request": request})
+
+
 @app.get("/health")
 def health_check():
     """API health check endpoint"""

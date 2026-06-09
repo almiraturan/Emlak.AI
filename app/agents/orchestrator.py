@@ -93,6 +93,14 @@ class OrchestratorAgent:
             duration_ms = (time.time() - start_time) * 1000
 
             return {
+                "listing": {
+                    "id": listing.id,
+                    "title": listing.title,
+                    "price": float(listing.price) if listing.price is not None else 0.0,
+                    "city": listing.city,
+                    "district": listing.district,
+                    "neighborhood": listing.neighborhood,
+                },
                 "profile": profile,
                 "lifestyle": lifestyle,
                 "price": price,

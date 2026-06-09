@@ -2,32 +2,98 @@
 
 {% block title %}Analiz - EmlakAI{% endblock %}
 
+{% block extra_css %}
+<style>
+    .detail-save-btn {
+        width: 3rem;
+        height: 3rem;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(10, 15, 30, 0.65);
+        color: rgba(255, 255, 255, 0.85);
+        font-size: 1.3rem;
+        cursor: pointer;
+        display: grid;
+        place-items: center;
+        transition: transform 0.15s, background 0.15s, color 0.15s;
+        outline: none;
+    }
+    .detail-save-btn:hover {
+        transform: scale(1.08);
+    }
+    .detail-save-btn.is-saved {
+        background: rgba(220, 38, 38, 0.22);
+        border-color: rgba(248, 113, 113, 0.4);
+        color: #fecaca;
+    }
+    .result-listing-header-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-radius: 16px;
+    }
+    .listing-dropdown-list {
+        scrollbar-width: thin;
+        scrollbar-color: var(--teal-glow) transparent;
+    }
+    .listing-dropdown-list::-webkit-scrollbar {
+        width: 6px;
+    }
+    .listing-dropdown-list::-webkit-scrollbar-thumb {
+        background: var(--teal-glow);
+        border-radius: 3px;
+    }
+    .listing-dropdown-item {
+        padding: 0.75rem 1.25rem;
+        cursor: pointer;
+        color: var(--text-dim);
+        font-size: 0.9rem;
+        transition: all 0.2s;
+        text-align: left;
+    }
+    .listing-dropdown-item:hover {
+        background: rgba(217, 119, 6, 0.08);
+        color: var(--amber-light);
+    }
+    .listing-dropdown-item.selected {
+        background: rgba(217, 119, 6, 0.15);
+        color: var(--amber-light);
+        font-weight: 600;
+    }
+    .listing-dropdown-no-results {
+        padding: 0.75rem 1.25rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        font-style: italic;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="analyze-page">
-    <section class="analyze-header">
+    <section class="page-hero">
         <h1>Tam Analiz</h1>
-        <p>Bir kullanıcı ve İlan kombinasyonunun kapsamlı analizi</p>
+        <p>Bir kullanıcı ve ilan kombinasyonunun kapsamlı yapay zeka analizi</p>
     </section>
 
     <section class="analyze-inputs glass">
-        <div class="input-group">
-            <label>Kullanıcı</label>
-            <input type="text" value="Almira" readonly style="opacity:0.7;cursor:default;">
+            <div id="userInfo" style="font-weight: 600; color: var(--text); padding: 0.7rem 0.95rem; background: #0d0d14; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: var(--radius-sm);">Almira</div>
         </div>
-        <div class="input-group listing-search-group" style="position:relative;">
-            <label for="listingSearch">İlan Seç</label>
-            <input
-                type="text"
-                id="listingSearch"
-                placeholder="İlan ara... (örn: ankara 3+1, beşiktaş)"
-                autocomplete="off"
-            >
-            <input type="hidden" id="selectedListingId">
-            <div id="listingDropdown" class="listing-dropdown" style="display:none;"></div>
+        <div class="input-group" style="position: relative;">
+            <label for="listingSelectSearch">İlan Seç</label>
+            <input type="text" id="listingSelectSearch" class="modal-input" placeholder="İlan ara..." autocomplete="off">
+            <input type="hidden" id="selectedListingId" value="1">
+            <div id="listingDropdownList" class="listing-dropdown-list glass" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; width: 100%; max-height: 250px; overflow-y: auto; z-index: 1000; border-radius: var(--radius-sm); background: rgba(10, 10, 15, 0.98); border: 1px solid var(--border-hover); box-shadow: var(--shadow-lg); padding: 0.5rem 0;">
+                <!-- Dinamik olarak doldurulur -->
+            </div>
         </div>
-        <button class="btn btn-primary" onclick="runFullAnalysis()">
-            <span id="analyzeButtonText">📊 Tam Analiz Yap</span>
-        </button>
+        <div style="display: flex; align-items: flex-end;">
+            <button class="btn btn-primary" onclick="runFullAnalysis()" style="width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; margin-top: auto;">
+                <span id="analyzeButtonText">📊 Tam Analiz Yap</span>
+            </button>
+        </div>
     </section>
 
     <!-- Selected listing preview -->
@@ -58,6 +124,58 @@
 
     <!-- Results -->
     <div id="resultsContainer" class="results-container" style="display:none;">
+        <!-- Listing Header Card -->
+        <div class="result-card glass result-listing-header-card">
+            <div>
+                <h2 id="listingTitle" style="margin: 0; font-size: 1.8rem; color: #fff;">-</h2>
+                <p id="listingLocationAndPrice" style="margin: 0.5rem 0 0 0; color: rgba(255, 255, 255, 0.7); font-size: 1.05rem;">-</p>
+            </div>
+            <button id="detailSaveBtn" class="detail-save-btn" type="button" title="Kaydet" onclick="toggleDetailSave()">🤍</button>
+        </div>
+
+        <!-- Profile Result -->
+        <div class="result-card glass result-profile">
+            <div class="result-header">
+                <h2>Kullanıcı Profili</h2>
+                <span class="result-badge profile">Profile</span>
+            </div>
+            <div class="result-body">
+                <div class="profile-cluster">
+                    <div class="cluster-label" id="clusterLabel">-</div>
+                    <div class="cluster-description" id="clusterDescription">-</div>
+                </div>
+                <div class="profile-metadata">
+                    <div class="metadata-item">
+                        <span class="metadata-label">Toplam Etkileşim:</span>
+                        <span class="metadata-value" id="totalEvents">-</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Tıklama:</span>
+                        <span class="metadata-value" id="clickCount">-</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Kaydetme:</span>
+                        <span class="metadata-value" id="saveCount">-</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Atlama:</span>
+                        <span class="metadata-value" id="skipCount">-</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Ortalama Kaydedilen Fiyat:</span>
+                        <span class="metadata-value" id="avgSavedPrice">-</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Atla Oranı:</span>
+                        <span class="metadata-value" id="skipRate">-</span>
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Kaydet Oranı:</span>
+                        <span class="metadata-value" id="saveRate">-</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         <!-- Lifestyle Result -->
         <div class="result-card glass result-lifestyle">
@@ -83,6 +201,17 @@
                             <span class="poi-count" id="schoolCount">-</span>
                         </div>
                         <div class="poi-nearest" id="schoolDistance">-</div>
+                        
+                        <!-- Filter chips for school type -->
+                        <div class="school-filters" style="width: 100%; display: flex; gap: 0.35rem; flex-wrap: wrap; margin: 0.45rem 0 0.45rem 0;">
+                            <button class="school-filter-btn active" onclick="filterSchoolType('Hepsi')" style="background: rgba(16,185,129,0.18); border: 1px solid rgba(16,185,129,0.4); color: #6ee7b7; border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Hepsi</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('İlkokul')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">İlkokul</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Ortaokul')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Ortaokul</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Bakımevi')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Bakımevi</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Lise')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Lise</button>
+                            <button class="school-filter-btn" onclick="filterSchoolType('Üniversite')" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); color: var(--text-muted); border-radius: 4px; padding: 0.15rem 0.35rem; font-size: 0.72rem; cursor: pointer; transition: all 0.15s;">Üniversite</button>
+                        </div>
+
                         <div class="poi-list" id="schoolNames">-</div>
                     </div>
                     <div class="poi-item" id="poiHospital">
@@ -222,114 +351,149 @@
 .poi-list { font-size: 0.78rem; color: #aaa; line-height: 1.5; }
 </style>
 <script>
-    const DEMO_USER_ID = 1;
+    const DEMO_USER_ID = localStorage.getItem('emlakai_user_id') || 1;
     let selectedListingId = null;
-    let searchDebounce = null;
+    let isCurrentlySaved = false;
+    let currentListingId = null;
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const params = new URLSearchParams(window.location.search);
-        const lid = params.get('listing_id');
-        if (lid) {
-            selectedListingId = parseInt(lid);
-            document.getElementById('selectedListingId').value = lid;
-            fetchAndShowListingPreview(selectedListingId);
-            runFullAnalysis();
-        }
+    let allListingsForSelection = [];
+    let currentSchoolDetails = [];
 
-        const searchInput = document.getElementById('listingSearch');
-        searchInput.addEventListener('input', () => {
-            clearTimeout(searchDebounce);
-            searchDebounce = setTimeout(() => doSearch(searchInput.value), 280);
+    function filterSchoolType(type) {
+        const buttons = document.querySelectorAll('.school-filter-btn');
+        buttons.forEach(btn => {
+            if (btn.textContent.trim() === type) {
+                btn.style.background = 'rgba(16,185,129,0.18)';
+                btn.style.borderColor = 'rgba(16,185,129,0.4)';
+                btn.style.color = '#6ee7b7';
+                btn.classList.add('active');
+            } else {
+                btn.style.background = 'rgba(255,255,255,0.04)';
+                btn.style.borderColor = 'rgba(255,255,255,0.08)';
+                btn.style.color = 'var(--text-muted)';
+                btn.classList.remove('active');
+            }
         });
 
+        let filtered = currentSchoolDetails;
+        if (type !== 'Hepsi') {
+            filtered = currentSchoolDetails.filter(s => s.category === type);
+        }
+
+        document.getElementById('schoolCount').textContent = filtered.length;
+        
+        if (filtered.length === 0) {
+            document.getElementById('schoolNames').textContent = '-';
+        } else {
+            document.getElementById('schoolNames').textContent = filtered.map(s => s.name).join(', ');
+        }
+
+        const distances = filtered.map(s => s.distance_km).filter(d => d !== null && d !== undefined);
+        const minDistance = distances.length > 0 ? Math.min(...distances) : null;
+        
+        const formatDistanceLocal = (value) => {
+            if (value === null || value === undefined) {
+                return '-';
+            }
+            if (value < 1) return `${Math.round(value * 1000)} m`;
+            return `${Number(value).toFixed(2)} km`;
+        };
+        document.getElementById('schoolDistance').textContent = `En yakın: ${formatDistanceLocal(minDistance)}`;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        const activeName = localStorage.getItem('emlakai_user_name') || 'Almira';
+        const userInfoEl = document.getElementById('userInfo');
+        if (userInfoEl) userInfoEl.textContent = activeName;
+
+        await fetchListingsForDropdown();
+        setupDropdownInteractions();
+    });
+
+    async function fetchListingsForDropdown() {
+        try {
+            const res = await fetch('/api/listings/selector');
+            if (!res.ok) throw new Error('İlanlar yüklenemedi');
+            allListingsForSelection = await res.json();
+            
+            // Read ?listing_id= from URL
+            const params = new URLSearchParams(window.location.search);
+            const lid = parseInt(params.get('listing_id'));
+            if (lid) {
+                const selected = allListingsForSelection.find(l => l.id === lid);
+                if (selected) {
+                    document.getElementById('listingId').value = selected.id;
+                    document.getElementById('listingSelectSearch').value = selected.title;
+                } else {
+                    document.getElementById('listingId').value = lid;
+                    document.getElementById('listingSelectSearch').value = `İlan #${lid}`;
+                }
+                runFullAnalysis();
+            } else if (allListingsForSelection.length > 0) {
+                // Pre-select first listing
+                const first = allListingsForSelection[0];
+                document.getElementById('listingId').value = first.id;
+                document.getElementById('listingSelectSearch').value = first.title;
+            }
+        } catch (err) {
+            console.error('Listings selector error:', err);
+        }
+    }
+
+    function setupDropdownInteractions() {
+        const searchInput = document.getElementById('listingSelectSearch');
+        const dropdownList = document.getElementById('listingDropdownList');
+        const hiddenInput = document.getElementById('listingId');
+
+        function filterAndShowDropdown() {
+            const query = searchInput.value.toLowerCase().trim();
+            dropdownList.innerHTML = '';
+            
+            const filtered = allListingsForSelection.filter(l => 
+                l.title.toLowerCase().includes(query) || l.id.toString() === query
+            );
+
+            if (filtered.length === 0) {
+                dropdownList.innerHTML = '<div class="listing-dropdown-no-results">Arama sonucu bulunamadı</div>';
+            } else {
+                filtered.forEach(l => {
+                    const item = document.createElement('div');
+                    item.className = 'listing-dropdown-item' + (hiddenInput.value == l.id ? ' selected' : '');
+                    item.textContent = l.title;
+                    item.onclick = () => {
+                        hiddenInput.value = l.id;
+                        searchInput.value = l.title;
+                        dropdownList.style.display = 'none';
+                        runFullAnalysis();
+                    };
+                    dropdownList.appendChild(item);
+                });
+            }
+            dropdownList.style.display = 'block';
+        }
+
         searchInput.addEventListener('focus', () => {
-            if (searchInput.value.trim().length >= 0) doSearch(searchInput.value);
+            filterAndShowDropdown();
+        });
+
+        searchInput.addEventListener('input', () => {
+            filterAndShowDropdown();
         });
 
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.listing-search-group')) {
-                document.getElementById('listingDropdown').style.display = 'none';
+            if (!e.target.closest('#listingSelectSearch') && !e.target.closest('#listingDropdownList')) {
+                dropdownList.style.display = 'none';
+                const currentId = parseInt(hiddenInput.value);
+                const currentSelected = allListingsForSelection.find(l => l.id === currentId);
+                if (currentSelected) {
+                    searchInput.value = currentSelected.title;
+                }
             }
         });
-    });
-
-    async function doSearch(query) {
-        const dropdown = document.getElementById('listingDropdown');
-        const q = query.trim();
-        try {
-            const url = `/api/listings/search?q=${encodeURIComponent(q)}&limit=20`;
-            const resp = await fetch(url);
-            const items = await resp.json();
-            renderDropdown(items);
-        } catch (e) {
-            dropdown.style.display = 'none';
-        }
-    }
-
-    function renderDropdown(items) {
-        const dropdown = document.getElementById('listingDropdown');
-        dropdown.innerHTML = '';
-        if (!items || items.length === 0) {
-            dropdown.innerHTML = '<div class="listing-dropdown-empty">Arama sonucu bulunamadı</div>';
-            dropdown.style.display = 'block';
-            return;
-        }
-        items.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'listing-dropdown-item';
-            const priceStr = item.price ? `₺${Math.round(item.price).toLocaleString('tr-TR')}` : '';
-            const metaParts = [item.district, item.city, item.room_layout_raw, priceStr].filter(Boolean);
-            div.innerHTML = `
-                <div class="item-title">${item.title || 'İlan #' + item.id}</div>
-                <div class="item-meta">${metaParts.join(' · ')}</div>
-            `;
-            div.addEventListener('click', () => selectListing(item));
-            dropdown.appendChild(div);
-        });
-        dropdown.style.display = 'block';
-    }
-
-    function selectListing(item) {
-        selectedListingId = item.id;
-        document.getElementById('selectedListingId').value = item.id;
-        document.getElementById('listingSearch').value = item.title || 'İlan #' + item.id;
-        document.getElementById('listingDropdown').style.display = 'none';
-
-        const priceStr = item.price ? `₺${Math.round(item.price).toLocaleString('tr-TR')}` : '';
-        const metaParts = [item.district, item.city, item.room_layout_raw, priceStr].filter(Boolean);
-        const preview = document.getElementById('selectedListingPreview');
-        preview.innerHTML = `
-            <div>
-                <div class="preview-title">${item.title || 'İlan #' + item.id}</div>
-                <div class="preview-meta">${metaParts.join(' · ')}</div>
-            </div>
-        `;
-        preview.style.display = 'flex';
-    }
-
-    async function fetchAndShowListingPreview(listingId) {
-        try {
-            const resp = await fetch(`/api/listings/${listingId}`);
-            if (!resp.ok) return;
-            const item = await resp.json();
-            selectListing({ id: item.id, title: item.title, price: item.price, district: item.district, city: item.city, room_layout_raw: item.room_layout_raw });
-        } catch (e) { /* ignore */ }
     }
 
     async function trackBehavior(behaviorType, listingId, metadata) {
-        try {
-            await fetch(`/api/behavior?user_id=${DEMO_USER_ID}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    behavior_type: behaviorType,
-                    listing_id: listingId || null,
-                    metadata: metadata || null,
-                }),
-            });
-        } catch (err) {
-            console.warn('Behavior tracking failed', err);
-        }
+        return; // Stopped logging user activity history
     }
 
     async function runFullAnalysis() {
@@ -394,6 +558,38 @@
         return `${d.toFixed(2)} km`;
     }
 
+    function displayResults(data) {
+        // Listing Info
+        if (data.listing) {
+            const listing = data.listing;
+            document.getElementById('listingTitle').textContent = listing.title || 'İlan';
+            const priceText = listing.price ? `₺${Math.round(listing.price).toLocaleString('tr-TR')}` : 'Fiyat belirtilmemiş';
+            const locParts = [listing.neighborhood, listing.district, listing.city].filter(Boolean);
+            const locText = locParts.length > 0 ? locParts.join(', ') : 'Konum bilgisi yok';
+            document.getElementById('listingLocationAndPrice').textContent = `${priceText} · ${locText}`;
+            
+            // Check and update save status
+            updateSaveButtonStatus(listing.id);
+        }
+
+        // Profile
+        if (data.profile) {
+            document.getElementById('clusterLabel').textContent = 
+                (data.profile.cluster_label || 'Unknown').toUpperCase();
+            document.getElementById('clusterDescription').textContent = 
+                data.profile.description || '-';
+            const meta = data.profile.metadata || {};
+            const setText = (id, v) => { document.getElementById(id).textContent = v; };
+            setText('totalEvents', meta.total_events ?? 0);
+            setText('clickCount', meta.click_count ?? 0);
+            setText('saveCount', meta.save_count ?? 0);
+            setText('skipCount', meta.skip_count ?? 0);
+            setText('avgSavedPrice',
+                meta.avg_saved_price ? `₺${Math.round(meta.avg_saved_price).toLocaleString('tr-TR')}` : '₺0');
+            setText('skipRate', `${((meta.skip_rate ?? 0) * 100).toFixed(1)}%`);
+            setText('saveRate', `${((meta.save_rate ?? 0) * 100).toFixed(1)}%`);
+        }
+
     function formatPoiNames(items, nearest) {
         if (!Array.isArray(items) || items.length === 0) return '—';
         const nearestStr = nearest !== null && nearest !== undefined
@@ -416,7 +612,30 @@
         const names = ls.poi_names || {};
         const radii = ls.category_radii_km || CATEGORY_RADII;
 
-        document.getElementById('schoolCount').textContent = pois.school ?? 0;
+        // Okullar category is managed by filterSchoolType
+        if (ls.school_details) {
+            currentSchoolDetails = ls.school_details;
+        } else if (names.school) {
+            currentSchoolDetails = names.school.map(name => {
+                let category = 'Diğer';
+                const lower = name.toLowerCase();
+                if (lower.includes('ilkokul') || lower.includes('ilköğretim') || lower.includes('ilkogretim')) category = 'İlkokul';
+                else if (lower.includes('ortaokul')) category = 'Ortaokul';
+                else if (lower.includes('lise')) category = 'Lise';
+                else if (lower.includes('anaokulu') || lower.includes('bakımevi') || lower.includes('kreş') || lower.includes('gündüz bakım') || lower.includes('gunduz bakim') || lower.includes('kindergarten') || lower.includes('daycare')) category = 'Bakımevi';
+                else if (lower.includes('üniversite') || lower.includes('universite') || lower.includes('university') || lower.includes('kampüs') || lower.includes('kampus')) category = 'Üniversite';
+                
+                return {
+                    name: name,
+                    category: category,
+                    distance_km: distances.school
+                };
+            });
+        } else {
+            currentSchoolDetails = [];
+        }
+        filterSchoolType('Hepsi');
+
         document.getElementById('hospitalCount').textContent = pois.hospital ?? 0;
         document.getElementById('busCount').textContent = pois.bus ?? 0;
         document.getElementById('metroCount').textContent = pois.subway ?? 0;
@@ -430,8 +649,6 @@
             return `En yakın: ${dStr} ötede`;
         };
 
-        document.getElementById('schoolDistance').textContent =
-            fmtNearest(distances.school, radii.school ?? 1, pois.school ?? 0);
         document.getElementById('hospitalDistance').textContent =
             fmtNearest(distances.hospital, radii.hospital ?? 3, pois.hospital ?? 0);
         document.getElementById('busDistance').textContent =
@@ -442,7 +659,6 @@
             fmtNearest(distances.park, radii.park ?? 1, pois.park ?? 0);
 
         // Name lists
-        document.getElementById('schoolNames').innerHTML = formatPoiNames(names.school, distances.school);
         document.getElementById('hospitalNames').innerHTML = formatPoiNames(names.hospital, distances.hospital);
         document.getElementById('busNames').innerHTML = formatPoiNames(names.bus, distances.bus);
         document.getElementById('metroNames').innerHTML = formatPoiNames(names.subway, distances.subway);
@@ -495,6 +711,64 @@
         if (data.total_duration_ms) {
             document.getElementById('analysisDuration').textContent =
                 Math.round(data.total_duration_ms);
+        }
+    }
+
+    async function updateSaveButtonStatus(listingId) {
+        currentListingId = listingId;
+        const btn = document.getElementById('detailSaveBtn');
+        try {
+            const res = await fetch(`/api/saved/status/${listingId}?user_id=${DEMO_USER_ID}`);
+            if (res.ok) {
+                const data = await res.json();
+                isCurrentlySaved = data.saved;
+                if (isCurrentlySaved) {
+                    btn.classList.add('is-saved');
+                    btn.textContent = '❤️';
+                    btn.title = 'Kaydedildi';
+                } else {
+                    btn.classList.remove('is-saved');
+                    btn.textContent = '🤍';
+                    btn.title = 'Kaydet';
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to fetch save status', err);
+        }
+    }
+
+    async function toggleDetailSave() {
+        if (!currentListingId) return;
+        const btn = document.getElementById('detailSaveBtn');
+        btn.disabled = true;
+        try {
+            if (isCurrentlySaved) {
+                const res = await fetch(`/api/saved/${currentListingId}?user_id=${DEMO_USER_ID}`, { method: 'DELETE' });
+                if (res.ok) {
+                    isCurrentlySaved = false;
+                    btn.classList.remove('is-saved');
+                    btn.textContent = '🤍';
+                    btn.title = 'Kaydet';
+                    showToast('İlan kaydedilenlerden çıkarıldı', 'info');
+                }
+            } else {
+                const res = await fetch('/api/saved', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ listing_id: currentListingId, user_id: DEMO_USER_ID }),
+                });
+                if (res.ok) {
+                    isCurrentlySaved = true;
+                    btn.classList.add('is-saved');
+                    btn.textContent = '❤️';
+                    btn.title = 'Kaydedildi';
+                    showToast('İlan kaydedildi', 'success');
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to toggle save status', err);
+        } finally {
+            btn.disabled = false;
         }
     }
 

@@ -6,18 +6,17 @@
 <div class="listings-page">
     <section class="listings-header">
         <h1>İlanlar</h1>
-        <p>Veritabanındaki tüm aktif ilanlar. EmlakJet verisi de buraya çekilip gösterilir.</p>
+        <p>Veritabanındaki tüm aktif ilanlar.</p>
         <div class="listings-controls">
             <input type="text" id="searchInput" placeholder="Arama..." class="search-input">
             <select id="sortSelect" class="sort-select">
                 <option value="recent">Son Eklenen</option>
-                <option value="price-asc">Fiyat (Düşük)</option>
-                <option value="price-desc">Fiyat (Yüksek)</option>
-                <option value="lifestyle">Lifestyle Skoru</option>
+                <option value="personalized">Bana Özel (AI)</option>
+                <option value="price_asc">Fiyat (Düşük)</option>
+                <option value="price_desc">Fiyat (Yüksek)</option>
+                <option value="lifestyle_score">Lifestyle Skoru</option>
             </select>
-            <button id="syncEmlakjetButton" class="sync-button" type="button" onclick="syncEmlakjetListings()">EmlakJet’ten Çek</button>
         </div>
-        <div id="syncStatus" class="sync-status"></div>
     </section>
 
     <div id="listingsGrid" class="listings-grid">
@@ -63,9 +62,8 @@
     <div id="chatLog" class="chat-log"></div>
     <div id="chatFiltersBar" class="chat-filters" hidden></div>
     <form id="chatForm" class="chat-form">
-        <input id="chatInput" class="chat-input" type="text"
-               placeholder="ör: Kadıköy'de 3+1, max 5 milyon, sakin yer"
-               autocomplete="off" required>
+        <input id="chatInput" class="chat-input" type="text" placeholder="ör: Kadıköy'de 3+1, max 5 milyon, sakin yer"
+            autocomplete="off" required>
         <button type="submit" class="chat-send">Gönder</button>
     </form>
 </aside>
@@ -73,7 +71,8 @@
 
 <!-- Compare bar -->
 <div id="compareBar" class="compare-bar" hidden>
-    <span class="compare-bar-label">Karşılaştır: <span id="compareCount" class="compare-bar-count">0</span>/2 ilan</span>
+    <span class="compare-bar-label">Karşılaştır: <span id="compareCount" class="compare-bar-count">0</span>/2
+        ilan</span>
     <button class="compare-bar-run" id="compareRunBtn" onclick="runCompare()" disabled>⚖️ Karşılaştır</button>
     <button class="compare-bar-clear" onclick="clearCompare()" title="Temizle">✕</button>
 </div>
@@ -87,6 +86,7 @@
     </div>
 </div>
 {% endblock %}
+
 
 {% block extra_css %}
 <style>
@@ -820,6 +820,37 @@
         color: #fecaca;
     }
 
+    .listing-scores-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.50rem;
+        margin-top: 0.50rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding-top: 0.75rem;
+    }
+
+    .listing-match {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .match-label {
+        font-size: 0.95rem;
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    .match-pill {
+        border-radius: 999px;
+        padding: 0.35rem 0.75rem;
+        background: rgba(99, 102, 241, 0.18);
+        border: 1px solid rgba(99, 102, 241, 0.35);
+        color: #e0e7ff;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
     @media (max-width: 720px) {
         .listings-controls {
             grid-template-columns: 1fr;
@@ -827,7 +858,8 @@
 
         .listing-header,
         .listing-footer,
-        .listing-lifestyle {
+        .listing-lifestyle,
+        .listing-match {
             flex-direction: column;
         }
     }
@@ -837,6 +869,7 @@
 {% block extra_js %}
 <script>
     const PAGE_SIZE = 10;
+    const USER_ID = localStorage.getItem('emlakai_user_id') || 1;
     let currentPage = 1;
     let totalPages = 1;
     let totalCount = 0;
@@ -846,12 +879,38 @@
     let savedIds = new Set();
     let compareIds = new Set();
 
+    let searchDebounceTimer = null;
+
     document.addEventListener('DOMContentLoaded', async () => {
+        // Read ?search= from URL and pre-fill the search input
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlSearch = urlParams.get('search');
+        if (urlSearch) {
+            document.getElementById('searchInput').value = urlSearch;
+        }
+
+        // Load active filters from localStorage if they exist
+        const savedFilters = localStorage.getItem('emlakai_active_chat_filters');
+        if (savedFilters) {
+            try {
+                activeChatFilters = JSON.parse(savedFilters);
+            } catch (e) {
+                console.error("Failed to parse saved filters", e);
+            }
+        }
+
         await loadSavedIds();
         await loadListings(1);
 
-        document.getElementById('searchInput').addEventListener('input', () => render());
-        document.getElementById('sortSelect').addEventListener('change', () => render());
+        // Render filter chips after listings have initialized so that the UI is in sync
+        renderFilterChips();
+
+        // Server-side search: debounce and reload from API
+        document.getElementById('searchInput').addEventListener('input', () => {
+            clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => loadListings(1), 350);
+        });
+        document.getElementById('sortSelect').addEventListener('change', () => loadListings(1));
 
         initChat();
         initEmailModal();
@@ -894,7 +953,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     email,
-                    user_id: 1,
+                    user_id: parseInt(USER_ID),
                     min_lifestyle_score: minScore,
                 }),
             });
@@ -910,10 +969,21 @@
     }
 
     function buildListingsQuery(page) {
-        const params = new URLSearchParams({ page, page_size: PAGE_SIZE });
+        const params = new URLSearchParams({ page, page_size: PAGE_SIZE, user_id: USER_ID });
+
+        // Include the search input value for server-side search
+        const searchTerm = document.getElementById('searchInput').value.trim();
+        if (searchTerm) params.set('search', searchTerm);
+
+        // Include sort
+        const sortBy = document.getElementById('sortSelect').value;
+        if (sortBy && sortBy !== 'recent') params.set('sort_by', sortBy);
+
         for (const [k, v] of Object.entries(activeChatFilters)) {
-            if (v === null || v === undefined || v === '' || Array.isArray(v)) continue;
+            if (v === null || v === undefined || v === '') continue;
             if (k === 'sort_by') params.set('sort_by', v);
+            else if (k === 'keywords' && Array.isArray(v)) params.set('keywords', v.join(','));
+            else if (Array.isArray(v)) continue;
             else params.set(k, v);
         }
         return params.toString();
@@ -943,34 +1013,10 @@
     }
 
     function render() {
-        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-        const sortBy = document.getElementById('sortSelect').value;
-
-        let items = currentItems.filter(listing => {
-            const title = (listing.title || '').toLowerCase();
-            const district = (listing.district || '').toLowerCase();
-            return title.includes(searchTerm) || district.includes(searchTerm);
-        });
-
-        switch (sortBy) {
-            case 'price-asc':
-                items.sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
-                break;
-            case 'price-desc':
-                items.sort((a, b) => Number(b.price || 0) - Number(a.price || 0));
-                break;
-            case 'lifestyle':
-                items.sort((a, b) => (b.lifestyle_score || 0) - (a.lifestyle_score || 0));
-                break;
-        }
-
+        let items = currentItems;
         if (recommendedListings.length > 0 && currentPage === 1) {
             const recIds = new Set(recommendedListings.map(l => l.id));
-            const pinned = recommendedListings.filter(l => {
-                const title = (l.title || '').toLowerCase();
-                const district = (l.district || '').toLowerCase();
-                return !searchTerm || title.includes(searchTerm) || district.includes(searchTerm);
-            });
+            const pinned = recommendedListings;
             const rest = items.filter(l => !recIds.has(l.id));
             items = [...pinned, ...rest];
         }
@@ -1048,7 +1094,10 @@
         }
     }
 
+    window.currentRankedIds = [];
+
     function displayListings(listings) {
+        window.currentRankedIds = listings.map(l => l.id);
         const grid = document.getElementById('listingsGrid');
         const noResults = document.getElementById('noResults');
 
@@ -1072,7 +1121,7 @@
 
     async function loadSavedIds() {
         try {
-            const res = await fetch('/api/saved?user_id=1');
+            const res = await fetch(`/api/saved?user_id=${USER_ID}`);
             if (!res.ok) return;
             const items = await res.json();
             savedIds = new Set(items.map(i => i.id));
@@ -1084,7 +1133,7 @@
         btn.disabled = true;
         try {
             if (isSaved) {
-                await fetch(`/api/saved/${listingId}?user_id=1`, { method: 'DELETE' });
+                await fetch(`/api/saved/${listingId}?user_id=${USER_ID}`, { method: 'DELETE' });
                 savedIds.delete(listingId);
                 btn.classList.remove('is-saved');
                 btn.textContent = '🤍';
@@ -1093,7 +1142,7 @@
                 await fetch('/api/saved', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ listing_id: listingId, user_id: 1 }),
+                    body: JSON.stringify({ listing_id: listingId, user_id: USER_ID }),
                 });
                 savedIds.add(listingId);
                 btn.classList.add('is-saved');
@@ -1193,7 +1242,7 @@
             const res = await fetch('/api/compare', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ listing_ids: [id1, id2], user_id: 1 }),
+                body: JSON.stringify({ listing_ids: [id1, id2], user_id: USER_ID }),
             });
             if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
@@ -1208,7 +1257,21 @@
         const priceVerdict = listing.price_verdict || 'fair';
         const priceValue = Number(listing.price || 0);
         const source = (listing.source || '').toLowerCase();
-        const sourceLabel = source === 'emlakjet' ? 'EmlakJet' : (source || 'seed');
+
+        let sourceLabel = 'Seed';
+        let sourceClass = 'is-seed';
+        if (source === 'emlakjet') {
+            sourceLabel = 'EmlakJet';
+            sourceClass = 'is-emlakjet';
+        } else if (source === 'toki') {
+            sourceLabel = 'TOKİ';
+            sourceClass = 'is-toki';
+        } else if (source === 'hepsiemlak') {
+            sourceLabel = 'Hepsiemlak';
+            sourceClass = 'is-hepsiemlak';
+        } else if (source) {
+            sourceLabel = source.charAt(0).toUpperCase() + source.slice(1);
+        }
 
         let verdictClass = 'fair';
         let verdictText = 'Adil';
@@ -1237,7 +1300,7 @@
                         onclick="event.stopPropagation(); toggleCompare(${listing.id}, this)">⚖️</button>
                 <div class="listing-header">
                     <h3 class="listing-title">${listing.title || 'Untitled'}</h3>
-                    ${source === 'emlakjet' ? `<span class="listing-source is-emlakjet">${sourceLabel}</span>` : ''}
+                    <span class="listing-source ${sourceClass}">${sourceLabel}</span>
                 </div>
 
                 <div class="listing-body">
@@ -1261,9 +1324,17 @@
                         </div>
                     </div>
 
-                    <div class="listing-lifestyle">
-                        <span class="lifestyle-label">Yaşam Kalitesi</span>
-                        ${lifestyleScore === null ? '<span class="lifestyle-pill">Veri yok</span>' : `<span class="lifestyle-pill">${lifestyleScore.toFixed(1)}/10</span>`}
+                    <div class="listing-scores-container">
+                        <div class="listing-lifestyle">
+                            <span class="lifestyle-label">🌿 Yaşam Kalitesi</span>
+                            ${lifestyleScore === null ? '<span class="lifestyle-pill">Veri yok</span>' : `<span class="lifestyle-pill">${lifestyleScore.toFixed(1)}/10</span>`}
+                        </div>
+                        ${listing.match_score !== null && listing.match_score !== undefined ? `
+                        <div class="listing-match">
+                            <span class="match-label">🎯 Uyum Skoru</span>
+                            <span class="match-pill">${listing.match_score.toFixed(1)}/10</span>
+                        </div>
+                        ` : ''}
                     </div>
                 </div>
 
@@ -1327,17 +1398,66 @@
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text, user_id: 1 }),
+                    body: JSON.stringify({
+                        message: text,
+                        user_id: USER_ID,
+                        ranked_ids: window.currentRankedIds || []
+                    }),
                 });
                 const data = await res.json();
                 typing.remove();
                 appendChat('bot', data.reply || '...');
                 recommendedListings = data.listings || [];
-                activeChatFilters = data.filters || {};
-                renderFilterChips();
-                applyRecommendationsToGrid(data.filters || {});
+                if (data.filters) {
+                    applyChatFilters(data.filters);
+                }
+
+                if (data.intent === 'navigate') {
+                    if (data.target && window.currentRankedIds[data.target - 1]) {
+                        const targetId = window.currentRankedIds[data.target - 1];
+                        const btn = document.getElementById('cmp-' + targetId);
+                        if (btn) {
+                            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            const card = btn.closest('.listing-card');
+                            if (card) {
+                                card.style.transition = 'box-shadow 0.3s';
+                                card.style.boxShadow = '0 0 0 4px var(--teal)';
+                                setTimeout(() => card.style.boxShadow = 'none', 2000);
+                            }
+                        }
+                    }
+                } else if (data.intent === 'analyze') {
+                    if (data.target && window.currentRankedIds[data.target - 1]) {
+                        const targetId = window.currentRankedIds[data.target - 1];
+                        const btn = document.getElementById('cmp-' + targetId);
+                        if (btn) {
+                            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            const card = btn.closest('.listing-card');
+                            if (card) {
+                                card.style.transition = 'box-shadow 0.3s';
+                                card.style.boxShadow = '0 0 0 4px var(--teal)';
+                                setTimeout(() => {
+                                    card.style.boxShadow = 'none';
+                                    goToAnalyze(targetId);
+                                }, 800);
+                            } else {
+                                goToAnalyze(targetId);
+                            }
+                        } else {
+                            goToAnalyze(targetId);
+                        }
+                    }
+                } else if (data.intent === 'search') {
+                    if (data.listings && data.listings.length > 0) {
+                        displayListings(data.listings);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                } else {
+                    applyRecommendationsToGrid(data.filters || {});
+                }
                 trackBehaviorFromChat(text);
             } catch (err) {
+                console.error(err);
                 typing.remove();
                 appendChat('bot', 'Bir hata oldu, tekrar dener misin?');
             }
@@ -1363,6 +1483,7 @@
 
     function applyChatFilters(filters) {
         activeChatFilters = filters;
+        localStorage.setItem('emlakai_active_chat_filters', JSON.stringify(filters));
         renderFilterChips();
         loadListings(1).then(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
     }
@@ -1445,6 +1566,7 @@
 
     function renderFilterChips() {
         const bar = document.getElementById('chatFiltersBar');
+        if (!bar) return;
         const chips = [];
         const f = activeChatFilters;
         if (f.city) chips.push(`🏙️ ${f.city.charAt(0).toUpperCase() + f.city.slice(1)}`);
@@ -1469,27 +1591,17 @@
     function clearChatFilters() {
         activeChatFilters = {};
         recommendedListings = [];
+        localStorage.removeItem('emlakai_active_chat_filters');
         renderFilterChips();
         loadListings(1);
     }
 
     function trackBehaviorFromChat(text) {
-        fetch('/api/behavior?user_id=1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ behavior_type: 'search', metadata: { query: text } }),
-            keepalive: true,
-        }).catch(() => {});
+        return; // Stopped logging user activity history
     }
 
     function goToAnalyze(listingId) {
-        // Fire-and-forget behavior tracking so the demo user's profile evolves.
-        fetch(`/api/behavior?user_id=1`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ behavior_type: 'click', listing_id: listingId }),
-            keepalive: true,
-        }).catch(() => {});
+        // Stopped logging user activity history
         window.location.href = `/analyze?listing_id=${listingId}`;
     }
 </script>

@@ -9,3 +9,8 @@ __pycache__
 .gitignore
 alembic/versions/__pycache__
 app/**/__pycache__
+.venv_linux
+*.db
+.local_pages.db
+.tmp_listings.db
+emlakai.db

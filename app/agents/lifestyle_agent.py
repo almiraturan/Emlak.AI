@@ -62,6 +62,9 @@ class LifestyleAgent(BaseAgent):
     # Maps OSM tags → our internal POI category
     _TAG_CATEGORY_MAP = [
         (("amenity", "school"),          "school"),
+        (("amenity", "university"),      "school"),
+        (("amenity", "college"),         "school"),
+        (("amenity", "kindergarten"),     "school"),
         (("amenity", "hospital"),        "hospital"),
         (("highway", "bus_stop"),        "bus"),
         (("railway", "subway_entrance"), "subway"),
@@ -69,10 +72,9 @@ class LifestyleAgent(BaseAgent):
         (("shop", "supermarket"),        "supermarket"),
         (("amenity", "restaurant"),      "restaurant"),
     ]
-
     def get_pois_nearby(
         self, latitude: float, longitude: float, radius_m: int = 1000
-    ) -> tuple[Dict[str, int], Dict[str, float | None], Dict[str, list[str]]]:
+    ) -> tuple[Dict[str, int], Dict[str, float | None], Dict[str, list[str]], list[dict]]:
         """
         Fetch POIs with a single batched Overpass query.
 
@@ -81,16 +83,15 @@ class LifestyleAgent(BaseAgent):
         find the nearest POI even when nothing is within the count radius.
 
         Returns:
-            pois               – count within count radius per category
-            nearest_distances_km – distance to absolute nearest, regardless of radius
-            poi_names          – names within count radius (or nearest name if none)
+            Tuple: (pois, nearest_distances_km, poi_names, school_details)
         """
         pois: Dict[str, int] = {k: 0 for _, k in self._TAG_CATEGORY_MAP}
         nearest_distances_km: Dict[str, float | None] = {k: None for _, k in self._TAG_CATEGORY_MAP}
         poi_names: Dict[str, list[str]] = {k: [] for _, k in self._TAG_CATEGORY_MAP}
+        school_details = []
 
         if latitude is None or longitude is None:
-            return pois, nearest_distances_km, poi_names
+            return pois, nearest_distances_km, poi_names, []
 
         # Use per-category SEARCH radius in the query so we can always find the nearest.
         # Use `node` for bus/subway (always point features) and `nwr` only for area features.
@@ -98,6 +99,9 @@ class LifestyleAgent(BaseAgent):
         overpass_query = (
             "[out:json][timeout:30];\n(\n"
             f'  nwr["amenity"="school"](around:{sr["school"]},{latitude},{longitude});\n'
+            f'  nwr["amenity"="university"](around:{sr["school"]},{latitude},{longitude});\n'
+            f'  nwr["amenity"="college"](around:{sr["school"]},{latitude},{longitude});\n'
+            f'  nwr["amenity"="kindergarten"](around:{sr["school"]},{latitude},{longitude});\n'
             f'  nwr["amenity"="hospital"](around:{sr["hospital"]},{latitude},{longitude});\n'
             f'  node["highway"="bus_stop"](around:{sr["bus"]},{latitude},{longitude});\n'
             f'  node["railway"="subway_entrance"](around:{sr["subway"]},{latitude},{longitude});\n'
@@ -128,7 +132,7 @@ class LifestyleAgent(BaseAgent):
 
             if response is None:
                 logger.error("All Overpass endpoints failed")
-                return pois, nearest_distances_km, poi_names
+                return pois, nearest_distances_km, poi_names, school_details
 
             elements = response.json().get("elements", [])
 
@@ -168,12 +172,30 @@ class LifestyleAgent(BaseAgent):
                         nearest_el = min(all_with_dist, key=lambda x: x[0])[1]
                         poi_names[category] = self._extract_poi_names([nearest_el], category)
 
-        except httpx.TimeoutException:
-            logger.warning("Overpass API timeout")
+                # Extract detailed school metadata
+                if category == "school":
+                    for d, element in within + outside:
+                        tags = element.get("tags") if isinstance(element.get("tags"), dict) else {}
+                        name = (
+                            tags.get("name")
+                            or tags.get("official_name")
+                            or tags.get("short_name")
+                            or tags.get("operator")
+                            or tags.get("brand")
+                            or tags.get("ref")
+                            or "Unnamed school"
+                        )
+                        category_type = self._classify_school(name, tags)
+                        school_details.append({
+                            "name": str(name).strip(),
+                            "category": category_type,
+                            "distance_km": round(d, 3) if d is not None else None
+                        })
+
         except Exception as e:
             logger.error("Error fetching POIs: %s", e)
 
-        return pois, nearest_distances_km, poi_names
+        return pois, nearest_distances_km, poi_names, school_details
 
     def _element_distance_km(self, lat: float, lon: float, element: dict) -> float | None:
         """Compute distance in km from origin to a single Overpass element."""
@@ -193,9 +215,10 @@ class LifestyleAgent(BaseAgent):
         pois: Dict[str, int] = {}
         nearest_distances_km: Dict[str, float | None] = {}
         poi_names: Dict[str, list[str]] = {}
+        school_details = []
         try:
             # radius_m kept for API compatibility but per-category radii are used internally
-            pois, nearest_distances_km, poi_names = self.get_pois_nearby(
+            pois, nearest_distances_km, poi_names, school_details = self.get_pois_nearby(
                 latitude,
                 longitude,
             )
@@ -224,7 +247,10 @@ Places: {poi_text}"""
                             "poi_counts": pois,
                             "nearest_distances_km": nearest_distances_km,
                             "poi_names": poi_names,
+                            "school_details": school_details,
                             "category_radii_km": {k: v / 1000 for k, v in CATEGORY_COUNT_RADIUS_M.items()},
+                            "search_radius_km": round(5000 / 1000.0, 2),
+                            "transit_search_radius_km": 1.0,
                             "source": "llm",
                         }
             else:
@@ -238,7 +264,10 @@ Places: {poi_text}"""
                 "poi_counts": pois,
                 "nearest_distances_km": nearest_distances_km,
                 "poi_names": poi_names,
+                "school_details": school_details,
                 "category_radii_km": {k: v / 1000 for k, v in CATEGORY_COUNT_RADIUS_M.items()},
+                "search_radius_km": round(5000 / 1000.0, 2),
+                "transit_search_radius_km": 1.0,
                 "source": "rule_based",
             }
 
@@ -250,13 +279,113 @@ Places: {poi_text}"""
                 "poi_counts": pois,
                 "nearest_distances_km": nearest_distances_km,
                 "poi_names": poi_names,
+                "school_details": school_details,
                 "category_radii_km": {k: v / 1000 for k, v in CATEGORY_COUNT_RADIUS_M.items()},
+                "search_radius_km": 5.0,
+                "transit_search_radius_km": 1.0,
                 "source": "partial" if pois else "error",
             }
+
+    def _turkish_lower(self, s: str) -> str:
+        """Convert string to lowercase taking Turkish characters into account."""
+        return s.replace("İ", "i").replace("I", "ı").lower()
+
+    def _classify_school(self, name: str, tags: dict) -> str:
+        """Classify school into primary, middle, high, daycare, university, or other."""
+        name_lower = self._turkish_lower(name)
+        amenity = tags.get("amenity", "")
+
+        # 1. Daycare / Kindergarten / Bakımevi
+        if (
+            amenity == "kindergarten"
+            or "bakımevi" in name_lower
+            or "bakim evi" in name_lower
+            or "kreş" in name_lower
+            or "anaokulu" in name_lower
+            or "gündüz bakım" in name_lower
+            or "gunduz bakim" in name_lower
+            or "kindergarten" in name_lower
+            or "preschool" in name_lower
+            or "daycare" in name_lower
+            or "çocuk evi" in name_lower
+            or "cocuk evi" in name_lower
+        ):
+            return "Bakımevi"
+
+        # 2. University
+        if (
+            amenity in ("university", "college")
+            or "üniversite" in name_lower
+            or "universite" in name_lower
+            or "university" in name_lower
+            or "kampüs" in name_lower
+            or "kampus" in name_lower
+            or "fakülte" in name_lower
+            or "fakulte" in name_lower
+        ):
+            return "Üniversite"
+
+        # 3. High School (Lise)
+        if (
+            "lise" in name_lower
+            or "high school" in name_lower
+            or "fen lisesi" in name_lower
+            or "anadolu lisesi" in name_lower
+            or "mesleki ve teknik" in name_lower
+            or "koleji" in name_lower
+            or "kolej" in name_lower
+        ):
+            return "Lise"
+
+        # 4. Middle School (Ortaokul)
+        if (
+            "ortaokul" in name_lower
+            or "middle school" in name_lower
+            or "imam hatip ortaokulu" in name_lower
+        ):
+            return "Ortaokul"
+
+        # 5. Primary School (İlkokul)
+        if (
+            "ilkokul" in name_lower
+            or "ilköğretim" in name_lower
+            or "ilkogretim" in name_lower
+            or "primary school" in name_lower
+        ):
+            return "İlkokul"
+
+        return "Diğer"
 
     def _extract_poi_names(self, elements: list[dict], poi_type: str) -> list[str]:
         """Extract human-readable POI names from Overpass elements."""
         names: list[str] = []
+
+        # For subway, build a list of stations to resolve unnamed entrances
+        stations = []
+        if poi_type == "subway":
+            for element in elements:
+                if not isinstance(element, dict):
+                    continue
+                tags = element.get("tags") if isinstance(element.get("tags"), dict) else {}
+                railway = tags.get("railway")
+                if railway in ("station", "tram_stop"):
+                    lat = element.get("lat")
+                    lon = element.get("lon")
+                    if (lat is None or lon is None) and isinstance(element.get("center"), dict):
+                        lat = element["center"].get("lat")
+                        lon = element["center"].get("lon")
+
+                    name = (
+                        tags.get("name")
+                        or tags.get("official_name")
+                        or tags.get("short_name")
+                    )
+                    if name and lat is not None and lon is not None:
+                        stations.append({
+                            "name": str(name).strip(),
+                            "lat": lat,
+                            "lon": lon
+                        })
 
         for element in elements:
             if not isinstance(element, dict):
@@ -271,6 +400,47 @@ Places: {poi_text}"""
                 or tags.get("brand")
                 or tags.get("ref")
             )
+
+            # Special resolution for subway entrances
+            if poi_type == "subway" and tags.get("railway") == "subway_entrance":
+                # Check if candidate is empty or just a number/ref
+                is_unnamed_or_ref = (
+                    not candidate
+                    or str(candidate).isdigit()
+                    or len(str(candidate)) <= 2
+                    or "unnamed" in str(candidate).lower()
+                )
+                if is_unnamed_or_ref:
+                    # Find coordinates of this entrance
+                    ent_lat = element.get("lat")
+                    ent_lon = element.get("lon")
+                    if (ent_lat is None or ent_lon is None) and isinstance(element.get("center"), dict):
+                        ent_lat = element["center"].get("lat")
+                        ent_lon = element["center"].get("lon")
+
+                    if ent_lat is not None and ent_lon is not None and stations:
+                        # Find nearest station
+                        nearest_station = None
+                        min_dist = float("inf")
+                        for station in stations:
+                            dist = self._haversine_km(ent_lat, ent_lon, station["lat"], station["lon"])
+                            if dist < min_dist:
+                                min_dist = dist
+                                nearest_station = station
+
+                        # If station is within 0.5 km (500 meters)
+                        if nearest_station and min_dist <= 0.5:
+                            station_name = nearest_station["name"]
+                            ref = tags.get("ref")
+                            if ref:
+                                candidate = f"{station_name} Metro Girişi ({ref})"
+                            else:
+                                candidate = f"{station_name} Metro Girişi"
+                        else:
+                            # Try to see if station tag is present on the entrance itself
+                            station_tag = tags.get("station") or tags.get("railway:station")
+                            if station_tag:
+                                candidate = f"{station_tag} Metro Girişi"
 
             if not candidate:
                 candidate = f"Unnamed {poi_type}"

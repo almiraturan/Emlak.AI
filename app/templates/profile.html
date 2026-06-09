@@ -1,0 +1,554 @@
+{% extends "base.html" %}
+
+{% block title %}Profilim - EmlakAI{% endblock %}
+
+{% block content %}
+<style>
+    .switch-account-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        border-radius: var(--radius-sm);
+        padding: 0.7rem 0.95rem;
+        color: var(--text-dim);
+        cursor: pointer;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+        text-align: left;
+        width: 100%;
+    }
+    .switch-account-item:hover {
+        background: var(--teal-glow);
+        border-color: rgba(13, 148, 136, 0.25);
+        color: var(--text);
+        transform: translateX(3px);
+    }
+    .switch-account-item.active {
+        background: rgba(13, 148, 136, 0.1);
+        border-color: rgba(13, 148, 136, 0.35);
+        color: var(--text);
+        font-weight: 600;
+    }
+</style>
+<div class="analyze-page">
+    <div class="page-hero">
+        <h1>Kullanıcı Profili</h1>
+        <p>Arama kriterlerinizi düzenleyin, AI çıkarımlarınızı inceleyin ve kaydedilen evlerinizi yönetin.</p>
+    </div>
+
+    <div class="profile-page-container">
+        <!-- Sidebar: Edit Preferences -->
+        <aside class="profile-sidebar">
+            <div class="glass profile-avatar-card">
+                <div class="avatar-large">👤</div>
+                <h2 class="profile-title-name" id="profileUserName">Yükleniyor...</h2>
+                <span class="profile-badge">Aktif Profil</span>
+
+                <button onclick="logoutUser()" class="btn btn-secondary btn-small" style="margin-top: 1.5rem; border-color: rgba(239, 68, 68, 0.4); color: #ef4444; background: rgba(239, 68, 68, 0.05); justify-content: center; width: 100%;">
+                    🚪 Oturumu Kapat
+                </button>
+            </div>
+
+            <!-- Hesap Değiştir Kartı -->
+            <div class="glass profile-section-card">
+                <h2 style="font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">👥 Hesap Değiştir</h2>
+                <div id="switchAccountContainer" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                    <!-- Dinamik olarak doldurulur -->
+                </div>
+            </div>
+
+            <div class="glass profile-section-card">
+                <h2>⚙️ Temel Tercihler</h2>
+                <form id="preferencesForm" onsubmit="updatePreferences(event)" class="pref-form" style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div class="input-group">
+                        <label for="prefName">Kullanıcı Adı</label>
+                        <input type="text" id="prefName" class="modal-input" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="prefBudgetMin">Min Bütçe (TL)</label>
+                        <input type="number" id="prefBudgetMin" class="modal-input" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="prefBudgetMax">Max Bütçe (TL)</label>
+                        <input type="number" id="prefBudgetMax" class="modal-input" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="prefRooms">Oda Sayısı Tercihi</label>
+                        <input type="number" id="prefRooms" class="modal-input" required>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="prefPurpose">Arama Amacı</label>
+                        <select id="prefPurpose" class="modal-input" style="background: rgba(0,0,0,0.4); color: white;">
+                            <option value="ikamet">İkamet (Oturum)</option>
+                            <option value="yatirim">Yatırım</option>
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="prefProvince">İl Tercihi</label>
+                        <select id="prefProvince" class="modal-input" style="background: rgba(0,0,0,0.4); color: white;" onchange="onProvinceChange()">
+                            <!-- Dinamik olarak doldurulur -->
+                        </select>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="prefDistrict">İlçe Tercihi</label>
+                        <select id="prefDistrict" class="modal-input" style="background: rgba(0,0,0,0.4); color: white;">
+                            <!-- Dinamik olarak doldurulur -->
+                        </select>
+                    </div>
+
+                    <div class="input-group" style="flex-direction: row; gap: 1rem; margin-top: 0.5rem;">
+                        <label class="modal-checkbox-group">
+                            <input type="checkbox" id="prefQuiet">
+                            <span>Sessiz Muhit</span>
+                        </label>
+                        <label class="modal-checkbox-group">
+                            <input type="checkbox" id="prefCentral">
+                            <span>Merkezi Konum</span>
+                        </label>
+                    </div>
+
+                    <div style="display: flex; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; width: 100%;">
+                        <button type="submit" class="btn btn-primary btn-small" style="flex: 1; justify-content: center; min-width: 120px; margin-top: 0;">
+                            💾 Tercihleri Kaydet
+                        </button>
+                        <button type="button" onclick="showResetPreferencesModal()" class="btn btn-outline-red btn-small" style="flex: 1; justify-content: center; min-width: 120px; margin-top: 0;">
+                            🔄 Sıfırla
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="profile-main-content">
+            <!-- AI Profile Deduction -->
+            <section class="glass profile-section-card">
+                <h2>✨ AI Davranış Çıkarımı</h2>
+                <p style="color: var(--color-text-secondary); margin-bottom: 1.5rem; font-size: 0.95rem;">
+                    Sistemimiz son 30 günde yaptığınız aramalar, kaydetmeler ve incelemelere (tıklama) dayanarak size özel bir tercih profili çıkarır.
+                </p>
+
+                <div class="results-container" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem;">
+                    <!-- AI Budget -->
+                    <div class="metadata-item" style="border-left-color: var(--color-price); background: rgba(245, 158, 11, 0.03); flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                        <span class="metadata-label">Tahmini Bütçe Sınırı</span>
+                        <span class="metadata-value" id="aiInferredBudget" style="font-size: 1.3rem; color: var(--color-price);">-</span>
+                        <span style="font-size: 0.75rem; color: var(--color-text-secondary);">Kaydedilen ve aranan ev fiyatlarına göre hesaplanır.</span>
+                    </div>
+
+                    <!-- AI Rooms -->
+                    <div class="metadata-item" style="border-left-color: var(--color-profile); background: rgba(59, 130, 246, 0.03); flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                        <span class="metadata-label">Tahmini Oda Tercihi</span>
+                        <span class="metadata-value" id="aiInferredRooms" style="font-size: 1.3rem; color: var(--color-profile);">-</span>
+                        <span style="font-size: 0.75rem; color: var(--color-text-secondary);">Etkileşime girdiğiniz evlerin ortalama oda sayısı.</span>
+                    </div>
+
+                    <!-- AI Lifestyle -->
+                    <div class="metadata-item" style="border-left-color: var(--color-lifestyle); background: rgba(16, 185, 129, 0.03); flex-direction: column; align-items: flex-start; gap: 0.5rem;">
+                        <span class="metadata-label">Tahmini Yaşam Önceliği</span>
+                        <span class="metadata-value" id="aiInferredLifestyle" style="font-size: 1.3rem; color: var(--color-lifestyle);">-</span>
+                        <span style="font-size: 0.75rem; color: var(--color-text-secondary);">"Sessiz" veya "Merkez" kelimelerini içeren ilan etkileşimi analizi.</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Saved Listings -->
+            <section class="glass profile-section-card">
+                <h2>⭐ Kaydedilen Evlerim (Favoriler)</h2>
+                <div id="savedListingsContainer" class="saved-listings-grid-profile">
+                    <!-- Loaded dynamically -->
+                    <div class="profile-empty-state">
+                        <div class="profile-empty-icon">⭐</div>
+                        <p>Henüz bir evi kaydetmediniz.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Reset Preferences Confirmation Modal -->
+            <div id="resetPrefModalOverlay" class="confirm-modal-overlay hidden">
+                <div class="confirm-modal-box" style="border-color: rgba(239, 68, 68, 0.3); box-shadow: 0 0 32px rgba(239, 68, 68, 0.15);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.75rem; margin-bottom: 0.5rem;">
+                        <h3 style="font-family: var(--font-title); color: #ef4444; font-size: 1.3rem; margin: 0;">Tercihleri Sıfırla</h3>
+                        <button onclick="closeResetPreferencesModal()" style="background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer;">&times;</button>
+                    </div>
+                    <p style="color: var(--text-dim); font-size: 0.9rem; line-height: 1.6; margin: 0;">
+                        Tüm tercihleriniz varsayılan değerlere sıfırlanacak. Devam etmek istiyor musunuz?
+                    </p>
+                    <div class="confirm-modal-actions" style="border-top: 1px solid rgba(255,255,255,0.05); padding-top: 1rem;">
+                        <button class="btn btn-secondary btn-small" onclick="closeResetPreferencesModal()">İptal</button>
+                        <button class="btn btn-small" onclick="confirmResetPreferences()" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; font-weight: 700; border-radius: var(--radius-sm); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);">Evet, Sıfırla</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const USER_ID = localStorage.getItem('emlakai_user_id') || 1;
+
+    const PROVINCES = [
+        "Adana", "Adıyaman", "Afyonkarahisar", "Ağrı", "Aksaray", "Amasya", "Ankara", "Antalya", "Ardahan",
+        "Artvin", "Aydın", "Balıkesir", "Bartın", "Batman", "Bayburt", "Bilecik", "Bingöl", "Bitlis",
+        "Bolu", "Burdur", "Bursa", "Çanakkale", "Çankırı", "Çorum", "Denizli", "Diyarbakır", "Düzce",
+        "Edirne", "Elazığ", "Erzincan", "Erzurum", "Eskişehir", "Gaziantep", "Giresun", "Gümüşhane",
+        "Hakkari", "Hatay", "Iğdır", "Isparta", "İstanbul", "İzmir", "Kahramanmaraş", "Karabük",
+        "Karaman", "Kars", "Kastamonu", "Kayseri", "Kilis", "Kırıkkale", "Kırklareli", "Kırşehir",
+        "Kocaeli", "Konya", "Kütahya", "Malatya", "Manisa", "Mardin", "Mersin", "Muğla", "Muş",
+        "Nevşehir", "Niğde", "Ordu", "Osmaniye", "Rize", "Sakarya", "Samsun", "Şanlıurfa", "Siirt",
+        "Sinop", "Şırnak", "Sivas", "Tekirdağ", "Tokat", "Trabzon", "Tunceli", "Uşak", "Van",
+        "Yalova", "Yozgat", "Zonguldak"
+    ];
+
+    const DISTRICTS_DATA = {
+        "İstanbul": [
+            "Adalar", "Arnavutköy", "Ataşehir", "Avcılar", "Bağcılar", "Bahçelievler", "Bakırköy", 
+            "Başakşehir", "Bayrampaşa", "Beşiktaş", "Beykoz", "Beylikdüzü", "Beyoğlu", "Büyükçekmece", 
+            "Çatalca", "Çekmeköy", "Esenler", "Esenyurt", "Eyüpsultan", "Fatih", "Gaziosmanpaşa", 
+            "Güngören", "Kadıköy", "Kağıthane", "Kartal", "Küçükçekmece", "Maltepe", "Pendik", 
+            "Sancaktepe", "Sarıyer", "Silivri", "Sultanbeyli", "Sultangazi", "Şile", "Şişli", 
+            "Tuzla", "Ümraniye", "Üsküdar", "Zeytinburnu"
+        ],
+        "Ankara": [
+            "Akyurt", "Altındağ", "Ayaş", "Bala", "Beypazarı", "Çamlıdere", "Çankaya", "Çubuk", 
+            "Elmadağ", "Etimesgut", "Evren", "Gölbaşı", "Güdül", "Haymana", "Kahramankazan", 
+            "Kalecik", "Keçiören", "Kızılcahamam", "Mamak", "Nallıhan", "Polatlı", "Pursaklar", 
+            "Sincan", "Şereflikoçhisar", "Yenimahalle"
+        ],
+        "İzmir": [
+            "Aliağa", "Balçova", "Bayındır", "Bayraklı", "Bergama", "Beydağ", "Bornova", "Buca", 
+            "Çeşme", "Çiğli", "Dikili", "Foça", "Gaziemir", "Güzelbahçe", "Karabağlar", "Karaburun", 
+            "Karşıyaka", "Kemalpaşa", "Kınık", "Kiraz", "Konak", "Menderes", "Menemen", "Narlıdere", 
+            "Ödemiş", "Seferihisar", "Selçuk", "Tire", "Torbalı", "Urla"
+        ]
+    };
+
+    function initProvinceDropdown() {
+        const provSelect = document.getElementById('prefProvince');
+        provSelect.innerHTML = '<option value="">Tüm İller</option>';
+        PROVINCES.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            provSelect.appendChild(opt);
+        });
+        updateDistrictDropdown("");
+    }
+
+    function updateDistrictDropdown(provinceName, selectedDistrict = "") {
+        const distSelect = document.getElementById('prefDistrict');
+        distSelect.innerHTML = '';
+        
+        if (!provinceName) {
+            distSelect.innerHTML = '<option value="">Tüm İlçeler</option>';
+            distSelect.disabled = true;
+            return;
+        }
+
+        distSelect.disabled = false;
+        const defaultOpt = document.createElement('option');
+        defaultOpt.value = '';
+        defaultOpt.textContent = 'Tüm İlçeler';
+        distSelect.appendChild(defaultOpt);
+
+        let districts = DISTRICTS_DATA[provinceName];
+        if (!districts) {
+            districts = ["Merkez", "Diğer"];
+        }
+
+        districts.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d;
+            opt.textContent = d;
+            if (d === selectedDistrict) {
+                opt.selected = true;
+            }
+            distSelect.appendChild(opt);
+        });
+    }
+
+    function onProvinceChange() {
+        const provSelect = document.getElementById('prefProvince');
+        updateDistrictDropdown(provSelect.value);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadUserProfile();
+        loadAISummary();
+        loadSavedListings();
+        loadSwitchAccountUsers();
+    });
+
+    async function loadSwitchAccountUsers() {
+        const container = document.getElementById('switchAccountContainer');
+        if (!container) return;
+        try {
+            const users = await fetch('/api/users').then(r => r.json());
+            container.innerHTML = '';
+            
+            users.forEach(user => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `switch-account-item ${user.id == USER_ID ? 'active' : ''}`;
+                
+                const activeIndicator = user.id == USER_ID ? ' <span style="color: var(--color-accent); font-size: 0.75rem; font-weight: 700;">● Aktif</span>' : '';
+                
+                btn.innerHTML = `
+                    <div style="display: flex; flex-direction: column;">
+                        <span style="font-weight: 600; font-size: 0.88rem;">👤 ${user.name}</span>
+                        <span style="font-size: 0.72rem; opacity: 0.6; margin-top: 0.15rem;">Bütçe: ${window.EmlakAI.formatPrice(user.budget_min)} - ${window.EmlakAI.formatPrice(user.budget_max)}</span>
+                    </div>
+                    ${activeIndicator}
+                `;
+                
+                btn.onclick = () => {
+                    if (user.id == USER_ID) return;
+                    localStorage.setItem('emlakai_user_id', user.id);
+                    localStorage.setItem('emlakai_user_name', user.name);
+                    window.EmlakAI.showToast(`Kullanıcı değiştirildi: ${user.name}`, 'success');
+                    setTimeout(() => window.location.reload(), 800);
+                };
+                
+                container.appendChild(btn);
+            });
+        } catch (err) {
+            console.error("Hesaplar yüklenemedi:", err);
+        }
+    }
+
+    async function loadUserProfile() {
+        try {
+            initProvinceDropdown();
+
+            const user = await fetch(`/api/users/${USER_ID}`).then(r => {
+                if (!r.ok) throw new Error("Profil yüklenemedi");
+                return r.json();
+            });
+
+            document.getElementById('profileUserName').textContent = user.name;
+
+            // Form inputs
+            document.getElementById('prefName').value = user.name;
+            document.getElementById('prefBudgetMin').value = user.budget_min;
+            document.getElementById('prefBudgetMax').value = user.budget_max;
+            document.getElementById('prefRooms').value = user.preferred_rooms;
+            document.getElementById('prefPurpose').value = user.purpose;
+            document.getElementById('prefQuiet').checked = user.prefers_quiet;
+            document.getElementById('prefCentral').checked = user.prefers_central;
+
+            if (user.province) {
+                document.getElementById('prefProvince').value = user.province;
+                updateDistrictDropdown(user.province, user.district || "");
+            } else {
+                document.getElementById('prefProvince').value = "";
+                updateDistrictDropdown("");
+            }
+
+        } catch (err) {
+            window.EmlakAI.showToast(err.message, 'error');
+        }
+    }
+
+    async function updatePreferences(e) {
+        e.preventDefault();
+        const name = document.getElementById('prefName').value.trim();
+        const budgetMin = parseFloat(document.getElementById('prefBudgetMin').value);
+        const budgetMax = parseFloat(document.getElementById('prefBudgetMax').value);
+        const rooms = parseInt(document.getElementById('prefRooms').value);
+        const purpose = document.getElementById('prefPurpose').value;
+        const quiet = document.getElementById('prefQuiet').checked;
+        const central = document.getElementById('prefCentral').checked;
+        const province = document.getElementById('prefProvince').value || null;
+        const district = document.getElementById('prefDistrict').value || null;
+
+        try {
+            const response = await fetch(`/api/users/${USER_ID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    budget_min: budgetMin,
+                    budget_max: budgetMax,
+                    preferred_rooms: rooms,
+                    prefers_quiet: quiet,
+                    prefers_central: central,
+                    purpose: purpose,
+                    province: province,
+                    district: district
+                })
+            });
+
+            if (!response.ok) throw new Error("Tercihler güncellenemedi");
+
+            const updatedUser = await response.json();
+            localStorage.setItem('emlakai_user_name', updatedUser.name);
+            document.getElementById('activeUserName').textContent = updatedUser.name;
+            document.getElementById('profileUserName').textContent = updatedUser.name;
+            window.EmlakAI.showToast('Kriterleriniz başarıyla kaydedildi!', 'success');
+            
+            // Reload page to reflect preference changes on sorting or AI summary
+            setTimeout(() => window.location.reload(), 1000);
+        } catch (err) {
+            window.EmlakAI.showToast(err.message, 'error');
+        }
+    }
+
+    async function loadAISummary() {
+        try {
+            const aiProfile = await fetch(`/api/profile/${USER_ID}`).then(r => r.json());
+            
+            document.getElementById('aiInferredBudget').textContent = window.EmlakAI.formatPrice(aiProfile.budget_max);
+            document.getElementById('aiInferredRooms').textContent = `${aiProfile.preferred_rooms} Oda`;
+            
+            let priorityText = "Dengeli";
+            if (aiProfile.lifestyle_priority === "quiet") priorityText = "Sessiz Muhit";
+            if (aiProfile.lifestyle_priority === "central") priorityText = "Merkezi Konum";
+            document.getElementById('aiInferredLifestyle').textContent = priorityText;
+
+        } catch (err) {
+            console.error("AI çıkarımı yüklenemedi", err);
+        }
+    }
+
+    async function loadSavedListings() {
+        const container = document.getElementById('savedListingsContainer');
+        try {
+            const listings = await fetch(`/api/saved?user_id=${USER_ID}`).then(r => r.json());
+            if (listings.length === 0) {
+                container.innerHTML = `
+                    <div class="profile-empty-state" style="grid-column: 1 / -1;">
+                        <div class="profile-empty-icon">⭐</div>
+                        <p>Henüz bir evi kaydetmediniz.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            listings.forEach(listing => {
+                const card = document.createElement('div');
+                card.className = 'metric-card glass';
+                card.style.padding = '1.25rem';
+                card.style.textAlign = 'left';
+                card.style.display = 'flex';
+                card.style.flexDirection = 'column';
+                card.style.justifyContent = 'space-between';
+                card.style.gap = '0.5rem';
+
+                card.innerHTML = `
+                    <div>
+                        <div style="font-size: 0.75rem; color: var(--color-accent); font-weight: 700; text-transform: uppercase;">
+                            ${listing.source}
+                        </div>
+                        <h4 style="margin: 0.2rem 0; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            <a href="/listings" style="color: var(--color-text); text-decoration: none;">${listing.title}</a>
+                        </h4>
+                        <div style="font-size: 1.2rem; font-weight: 700; color: var(--color-accent);">
+                            ${window.EmlakAI.formatPrice(listing.price)}
+                        </div>
+                        <div style="font-size: 0.8rem; color: var(--color-text-secondary);">
+                            📍 ${listing.district} &nbsp;|&nbsp; 📐 ${listing.area_m2} m² &nbsp;|&nbsp; 🛏️ ${listing.room_count_total} Oda
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-red btn-small" onclick="unsaveListing(${listing.id})" style="margin-top: 0.5rem; justify-content: center; width: 100%;">
+                        ❌ Favorilerden Çıkar
+                    </button>
+                `;
+                container.appendChild(card);
+            });
+
+        } catch (err) {
+            console.error("Favoriler yüklenemedi", err);
+        }
+    }
+
+    async function unsaveListing(listingId) {
+        try {
+            await fetch(`/api/saved/${listingId}?user_id=${USER_ID}`, { method: 'DELETE' });
+            window.EmlakAI.showToast("İlan favorilerden çıkarıldı.", "success");
+            loadSavedListings();
+            loadAISummary(); // Reload AI to update based on removed favorited listing
+        } catch (err) {
+            window.EmlakAI.showToast("İşlem başarısız.", "error");
+        }
+    }
+
+    function showResetPreferencesModal() {
+        document.getElementById('resetPrefModalOverlay').classList.remove('hidden');
+    }
+
+    function closeResetPreferencesModal() {
+        document.getElementById('resetPrefModalOverlay').classList.add('hidden');
+    }
+
+    async function confirmResetPreferences() {
+        closeResetPreferencesModal();
+        try {
+            const name = "Almira";
+            const budgetMin = 0.0;
+            const budgetMax = 0.0;
+            const rooms = 1;
+            const purpose = "ikamet";
+            const quiet = false;
+            const central = false;
+            const province = null;
+            const district = null;
+
+            // Clear any localStorage keys that contain 'pref' or 'form_'
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const key = localStorage.key(i);
+                if (key && (key.includes('pref') || key.includes('form_'))) {
+                    localStorage.removeItem(key);
+                }
+            }
+
+            const response = await fetch(`/api/users/${USER_ID}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    budget_min: budgetMin,
+                    budget_max: budgetMax,
+                    preferred_rooms: rooms,
+                    prefers_quiet: quiet,
+                    prefers_central: central,
+                    purpose: purpose,
+                    province: province,
+                    district: district
+                })
+            });
+
+            if (!response.ok) throw new Error("Tercihler sıfırlanamadı");
+
+            const updatedUser = await response.json();
+            localStorage.setItem('emlakai_user_name', updatedUser.name);
+            
+            document.getElementById('prefName').value = name;
+            document.getElementById('prefBudgetMin').value = budgetMin;
+            document.getElementById('prefBudgetMax').value = budgetMax;
+            document.getElementById('prefRooms').value = rooms;
+            document.getElementById('prefPurpose').value = purpose;
+            document.getElementById('prefQuiet').checked = quiet;
+            document.getElementById('prefCentral').checked = central;
+            document.getElementById('prefProvince').value = "";
+            updateDistrictDropdown("");
+
+            window.EmlakAI.showToast('Tercihler sıfırlandı.', 'success');
+            
+            setTimeout(() => window.location.reload(), 800);
+        } catch (err) {
+            window.EmlakAI.showToast(err.message, 'error');
+        }
+    }
+</script>
+{% endblock %}

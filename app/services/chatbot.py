@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.agents.base import BaseAgent
 from app.agents.lifestyle_agent import LifestyleAgent
 from app.models.listing import Listing
+from app.services.recommendation_service import calculate_compatibility_score
 
 logger = logging.getLogger(__name__)
 
@@ -259,13 +260,27 @@ def parse_message(message: str) -> ChatFilters:
     # --- Children (number-aware) ---
     # "3 çocuğum", "iki tane çocuk", "birkaç çocuk", "çocuklarım var"
     n_kids = None
-    child_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:cocuk|kiz|oglan|bebek|torun|cocugum|cocuklarim)", text)
-    if child_m:
-        n_kids = _parse_num(child_m.group(1)) or 1
-    elif re.search(r"birka[c]\s*(?:tane\s*)?(?:cocuk|kiz|torun)", text):
-        n_kids = 2
-    elif re.search(r"(?:cocugum|cocuklarim|kucuk cocuklar?)\s*var", text):
-        n_kids = 1
+    child_matches = re.findall(_NUM_PAT + r"\s*(?:tane\s*)?(?:cocuk|kiz|oglan|oglu|ogul|bebek|torun|cocugum|cocuklarim|evlat)", text)
+    if child_matches:
+        n_kids = sum(_parse_num(m) or 1 for m in child_matches)
+    else:
+        # Check for individual singular child mentions without numbers, e.g. "kızım ve oğlum var"
+        singular_mentions = 0
+        if re.search(r"\b(?:kizim|kizi)\b", text):
+            singular_mentions += 1
+        if re.search(r"\b(?:oglum|oglu)\b", text):
+            singular_mentions += 1
+        if re.search(r"\b(?:cocugum|cocugu)\b", text):
+            singular_mentions += 1
+        if re.search(r"\b(?:bebegim|bebegi)\b", text):
+            singular_mentions += 1
+        
+        if singular_mentions > 0:
+            n_kids = singular_mentions
+        elif re.search(r"birka[c]\s*(?:tane\s*)?(?:cocuk|kiz|torun)", text):
+            n_kids = 2
+        elif re.search(r"(?:cocugum|cocuklarim|kucuk cocuklar?)\s*var", text):
+            n_kids = 1
 
     if n_kids is not None:
         if f.min_rooms is None or f.min_rooms < n_kids:
@@ -296,10 +311,10 @@ def parse_message(message: str) -> ChatFilters:
             f.context = "family"
 
     # --- Elderly care (number-aware) ---
-    # "2 yaşlı", "annem babam için", "büyükannem var"
+    # "2 yaşlı", "annem babam için", "büyükannem var", "yatalak annem"
     elderly_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:yasli|emekli|buyukanne|buyukbaba|nine|dede)", text)
     has_elderly_rel = bool(re.search(
-        r"(?:annem|babam|annemin|babamin|anne.*baba|baba.*anne|buyukanne|buyukbaba|nine|dedem)",
+        r"(?:annem|babam|annemin|babamin|anne.*baba|baba.*anne|buyukanne|buyukbaba|nine|dedem|yatalak)",
         text,
     ))
     if elderly_m or has_elderly_rel:
@@ -426,6 +441,62 @@ def _check_poi_requirements_with_coords(
     return True
 
 
+def sort_listings_by_poi_distance(listings: list[Listing], poi_type: str, lat: float, lon: float) -> list[Listing]:
+    """Fetch POIs of type (hospital or school) around the center and sort listings by distance to the closest POI."""
+    if not listings:
+        return listings
+        
+    if poi_type == "hospital":
+        overpass_filter = '"amenity"="hospital"'
+    elif poi_type == "school":
+        overpass_filter = '"amenity"~"school|university|college|kindergarten"'
+    else:
+        return listings
+
+    query = (
+        "[out:json][timeout:15];"
+        f"(nwr[{overpass_filter}](around:5000,{lat},{lon}););"
+        "out center qt;"
+    )
+    
+    import httpx
+    try:
+        response = httpx.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query},
+            headers={"User-Agent": "EmlakAI/1.0"},
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            elements = data.get("elements", [])
+            
+            pois = []
+            for el in elements:
+                p_lat = el.get("lat")
+                p_lon = el.get("lon")
+                if (p_lat is None or p_lon is None) and isinstance(el.get("center"), dict):
+                    p_lat = el["center"].get("lat")
+                    p_lon = el["center"].get("lon")
+                if p_lat is not None and p_lon is not None:
+                    pois.append((p_lat, p_lon))
+            
+            if pois:
+                from app.services.recommendation_service import haversine_distance
+                
+                def get_min_dist(l):
+                    if l.latitude is None or l.longitude is None:
+                        return 999.0
+                    return min(haversine_distance(l.latitude, l.longitude, plat, plon) for plat, plon in pois)
+                
+                listings.sort(key=get_min_dist)
+                logger.info(f"Successfully sorted {len(listings)} listings by proximity to {poi_type}.")
+    except Exception as e:
+        logger.warning(f"Failed to sort listings by POI distance: {e}")
+        
+    return listings
+
+
 def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Listing]:
     q = db.query(Listing).filter(Listing.is_active.is_(True))
 
@@ -450,6 +521,23 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
     if filters.max_building_age is not None:
         q = q.filter(Listing.building_age <= filters.max_building_age)
 
+    # If the user has specific school or hospital requirements, fetch more candidates and sort by POI distance
+    is_hospital_req = filters.context == "elderly_care" or "hastane yakını" in filters.keywords
+    is_school_req = filters.context == "family_kids" or "okul yakını" in filters.keywords
+    
+    if is_hospital_req or is_school_req:
+        # Fetch up to 30 matching listings sorted by lifestyle score to run POI distance sorting on
+        candidates = q.order_by(desc(Listing.lifestyle_score)).limit(30).all()
+        valid_coords = [(c.latitude, c.longitude) for c in candidates if c.latitude and c.longitude]
+        if valid_coords:
+            center_lat = sum(x[0] for x in valid_coords) / len(valid_coords)
+            center_lon = sum(x[1] for x in valid_coords) / len(valid_coords)
+            
+            poi_type = "hospital" if is_hospital_req else "school"
+            candidates = sort_listings_by_poi_distance(candidates, poi_type, center_lat, center_lon)
+            return candidates[:limit]
+
+    # Standard sorting
     if filters.sort_by == "price_asc":
         q = q.order_by(asc(Listing.price))
     elif filters.sort_by == "price_desc":
@@ -503,29 +591,29 @@ def _contextual_explanation(context: str, picks: list[Listing]) -> str:
         return ""
     best = picks[0]
     if context == "pets":
-        return f"\n\n🐕 **Köpek/Kedi için ideal**: {best.title} yaşam puanı {best.lifestyle_score or 0:.1f}/10 ile bahçe ve çevre dostu. Parklar ve yeşil alanlar yakın!"
+        return f"\n\n**Kopek/Kedi icin ideal**: {best.title} yasam puani {best.lifestyle_score or 0:.1f}/10 ile bahce ve cevre dostu. Parklar ve yesil alanlar yakin!"
     elif context == "family":
-        return f"\n\n👨-👩-👧-👦 **Aileniz için**: {best.title} {best.room_count_total} oda, {best.area_m2:.0f} m² ile geniş. Okullar ve oyun alanları yakın."
+        return f"\n\n**Aileniz icin**: {best.title} {best.room_count_total} oda, {best.area_m2:.0f} m² ile genis. Okullar ve oyun alanlari yakin."
     elif context == "student":
-        return f"\n\n🎓 **Öğrenciye uygun**: {best.title} uygun fiyat ve merkezi konum. Sosyal yaşam puanı {best.lifestyle_score or 0:.1f}/10."
+        return f"\n\n**Ogrenciye uygun**: {best.title} uygun fiyat ve merkezi konum. Sosyal yasam puani {best.lifestyle_score or 0:.1f}/10."
     elif context == "elderly":
-        return f"\n\n👴 **Yaşlılar için**: {best.title} erişilebilir konumda, sağlık hizmetleri yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Yaslilar icin**: {best.title} erisilebilir konumda, saglik hizmetleri yakin (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "family_kids":
-        return f"\n\n👨‍👩‍👧‍👦 **Çocuklu aile için**: {best.title} geniş {best.room_count_total} oda, okul ve oyun alanlarına yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Cocuklu aile icin**: {best.title} genis {best.room_count_total} oda, okul ve oyun alanlarina yakin (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "elderly_care":
-        return f"\n\n👴 **Yaşlı bakımı için**: {best.title} asansörlü, hastane ve sağlık merkezi yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Yasli bakimi icin**: {best.title} asansorlu, hastane ve saglik merkezi yakin (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "remote":
-        return f"\n\n💻 **Evden çalışma için**: {best.title} sessiz çevrede. İnternet ve ışık avantajlı."
+        return f"\n\n**Evden calisma icin**: {best.title} sessiz cevrede. Internet ve isik avantajli."
     elif context == "nature":
-        return f"\n\n🌳 **Doğaya yakın**: {best.title} yeşil alanlar ve parklar başında (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Dogaya yakin**: {best.title} yesil alanlar ve parklar basinda (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "nightlife":
-        return f"\n\n🎉 **Sosyal ve aktif**: {best.title} kafe, bar ve restoranlar yakın. Eğlence merkezinde!"
+        return f"\n\n**Sosyal ve aktif**: {best.title} kafe, bar ve restoranlar yakin. Eglence merkezinde!"
     elif context == "newlywed":
-        return f"\n\n💑 **Yeni çiftler için**: {best.title} modern ve merkezi, {best.room_count_total} oda (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Yeni ciftler icin**: {best.title} modern ve merkezi, {best.room_count_total} oda (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "transport":
-        return f"\n\n🚇 **Ulaşım odaklı**: {best.title} metro ve toplu taşıma hatlarına yakın (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Ulasim odakli**: {best.title} metro ve toplu tasima hatlarina yakin (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "studio":
-        return f"\n\n🏠 **Stüdyo/küçük daire**: {best.title} pratik ve ekonomik, {best.area_m2:.0f} m² (yaşam puanı {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Studyo/kucuk daire**: {best.title} pratik ve ekonomik, {best.area_m2:.0f} m² (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     return ""
 
 
@@ -579,7 +667,7 @@ def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total:
             "• Oda: *3+1*, *en az 2 oda*, *stüdyo*\n"
             "• Bütçe: *5 milyon altı*, *bütçem 3 milyon*\n"
             "• Aile: *2 çocuğum var*, *4 kişilik aile*, *annem için*\n"
-            "• Özellik: *metro yakını*, *otobüs yakını*, *yeni bina*, *bahçeli*\n\n"
+            "• Özellik: *metro yakını*, *otobüs yakını*, *yeni bina*, *bahçeli*, *asansörlü*\n\n"
             "Ne arıyorsunuz?"
         )
 
@@ -600,11 +688,11 @@ def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total:
         if filters.district:
             bits.append(filters.district.title())
         if filters.max_price:
-            bits.append(f"{_format_price(filters.max_price)} altında")
+            bits.append(f"{_format_price(filters.max_price)} altinda")
         if filters.min_rooms:
             bits.append(f"{filters.min_rooms}+ oda")
-        criteria = ", ".join(bits) if bits else "verdiğin kriterler"
-        return f"Üzgünüm, {criteria} için uygun ilan bulamadım. Bütçe veya tercihini esnetir misin?"
+        criteria = ", ".join(bits) if bits else "verdigin kriterler"
+        return f"Uzgunum, {criteria} icin uygun ilan bulamadim. Butce veya tercihini esnetir misin?"
 
     llm_reply = _llm_explain(message, filters, picks, total)
     if llm_reply:
@@ -621,15 +709,17 @@ def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total:
         intro_bits.append(f"min {_format_price(filters.min_price)}")
     intro = " · ".join(intro_bits) if intro_bits else "tercihlerin"
 
-    lines = [f"Harika! {intro} için {total} ilan buldum. İlk {len(picks)} tavsiye:"]
+    lines = [f"Harika! {intro} icin {total} ilan buldum. Ilk {len(picks)} tavsiye:"]
     for i, l in enumerate(picks, 1):
         score = l.lifestyle_score or 0
         verdict = {"underpriced": "ucuz", "fair": "adil", "overpriced": "pahalı"}.get(
             (l.price_verdict or "fair"), "adil"
         )
+        compat_score = calculate_compatibility_score(l, filters)
+        compat_str = f"uyum skoru {compat_score:.1f}/10 · " if compat_score is not None else ""
         lines.append(
             f"{i}. **{l.title}** — {_format_price(l.price)} · {l.area_m2:.0f} m² · "
-            f"{l.room_count_total} oda · ✨ {score:.1f}/10 · fiyat {verdict}"
+            f"{l.room_count_total} oda · {compat_str}yasam puani {score:.1f}/10 · fiyat {verdict}"
         )
 
     lines.append(_contextual_explanation(filters.context, picks))
@@ -640,15 +730,21 @@ def _llm_explain(message: str, filters: ChatFilters, picks: list[Listing], total
     agent = BaseAgent()
     if not agent.is_ollama_available():
         return None
-    listings_text = "\n".join(
-        f"- {l.title}: {int(l.price)} TRY, {l.area_m2:.0f} m², {l.room_count_total} oda, {l.district}, yaşam {l.lifestyle_score or 0:.1f}/10"
-        for l in picks
-    )
+    
+    def format_listing_for_llm(l):
+        cs = calculate_compatibility_score(l, filters)
+        cs_str = f", uyum skoru {cs:.1f}/10" if cs is not None else ""
+        return f"- {l.title}: {int(l.price)} TRY, {l.area_m2:.0f} m², {l.room_count_total} oda, {l.district}{cs_str}, yasam puani {l.lifestyle_score or 0:.1f}/10"
+
+    listings_text = "\n".join(format_listing_for_llm(l) for l in picks)
     prompt = (
-        "Sen bir Türk emlak danışmanısın. Kullanıcı isteği ve eşleşen ilanlar veriliyor. "
-        "Kısa (3-5 cümle), Türkçe, samimi bir cevap üret. Neden seçtiğini açıkla.\n\n"
-        f"İstek: {message}\n\n"
-        f"Öneriler ({total} toplam):\n{listings_text}\n\nCevap:"
+        "Sen EmlakAI'nın akıllı asistanısın. Türkiye'deki emlak piyasası, "
+        "ev satın alma süreci, fiyat analizi, mahalle karşılaştırması ve "
+        "yatırım tavsiyesi konularında yardım edersin. Her zaman Türkçe "
+        "yanıt ver. Kısa ve net ol. Emojileri asla kullanma.\n\n"
+        f"Kullanıcı İsteği: {message}\n"
+        f"Eşleşen İlanlar ({total} adet):\n{listings_text}\n\n"
+        "Cevap:"
     )
     try:
         return agent.call_llm(prompt)

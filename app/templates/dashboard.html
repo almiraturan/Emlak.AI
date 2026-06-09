@@ -224,8 +224,46 @@
 </style>
 {% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Small plus cross decorations near Akıllı Öneri card */
+    .cross-decor {
+        position: absolute;
+        color: rgba(255, 255, 255, 0.06);
+        font-family: monospace;
+        font-size: 0.75rem;
+        pointer-events: none;
+    }
+    .cross-decor-1 { top: 12px; right: 120px; }
+    .cross-decor-2 { bottom: 12px; right: 20px; }
+
+    /* Page-level decorative geometric star on far right */
+    .decor-star-bg {
+        position: absolute;
+        right: 3%;
+        bottom: 5%;
+        width: 80px;
+        height: 80px;
+        color: rgba(255, 255, 255, 0.05);
+        pointer-events: none;
+        z-index: 1;
+        opacity: 0.45;
+    }
+    .dashboard-decor-container {
+        position: relative;
+        width: 100%;
+        overflow: visible;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="dashboard-page">
+<div class="dashboard-page dashboard-decor-container">
+
+    <!-- Page decoration 4-pointed star -->
+    <svg class="decor-star-bg" viewBox="0 0 100 100" fill="currentColor">
+        <path d="M50 0 C53 35 65 47 100 50 C65 53 53 65 50 100 C47 65 35 53 0 50 C35 47 47 35 50 0 Z"/>
+    </svg>
 
     <!-- Hero + Chatbot -->
     <section class="home-hero">
@@ -250,7 +288,7 @@
                 </div>
                 <form id="homeChatForm" class="home-chat-form" autocomplete="off">
                     <input id="homeChatInput" class="home-chat-input" type="text"
-                           placeholder="ör: Ankara'da 3+1, köpek dostu, 5M altı..." />
+                           placeholder="ör: Ankara'da 3+1, köpek dostu, 5M altı..." required />
                     <button type="submit" id="homeChatSend" class="home-chat-send">Gönder</button>
                 </form>
             </div>
@@ -263,7 +301,6 @@
             </div>
         </div>
     </section>
-
     <!-- AI Recommendation Results -->
     <div id="homeRecs" class="home-recs" style="display:none;">
         <div class="home-recs-title">✨ <span id="homeRecsTitle">AI Önerileri</span></div>
@@ -291,19 +328,25 @@
             </div>
         </div>
     </section>
+        </div>
+    </section>
 
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-const DEMO_USER_ID = 1;
+const USER_ID = localStorage.getItem('emlakai_user_id') || 1;
 let homeRecommendedListings = [];
 
 const chatLog   = document.getElementById('homeChatLog');
 const chatForm  = document.getElementById('homeChatForm');
 const chatInput = document.getElementById('homeChatInput');
 const chatSend  = document.getElementById('homeChatSend');
+
+document.addEventListener('DOMContentLoaded', () => {
+    localStorage.removeItem('emlakai_active_chat_filters');
+});
 
 function appendMsg(role, text) {
     const div = document.createElement('div');
@@ -370,11 +413,16 @@ async function sendHomeChat(text) {
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, user_id: DEMO_USER_ID }),
+            body: JSON.stringify({ message: text, user_id: USER_ID }),
         });
         const data = await res.json();
         typing.remove();
         appendMsg('bot', data.reply || '...');
+        
+        if (data.filters) {
+            localStorage.setItem('emlakai_active_chat_filters', JSON.stringify(data.filters));
+        }
+
         homeRecommendedListings = data.listings || [];
         if (homeRecommendedListings.length > 0) {
             renderHomeRecs(homeRecommendedListings);

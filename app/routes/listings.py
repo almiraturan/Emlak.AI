@@ -1,11 +1,34 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import asc, desc, or_
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
+from app.models import User
 from app.models.listing import Listing
-from app.schemas.listing import ListingCardResponse, ListingListResponse, ListingResponse
+from app.schemas.listing import ListingCardResponse, ListingListResponse, ListingResponse, ListingSelectorResponse
 from app.services.listing_service import get_listing_by_id
+from app.services.recommendation_service import calculate_match_score, calculate_compatibility_score
+
+def canonicalize_turkish(text: str) -> str:
+    if not text:
+        return ""
+    # Replace capital Turkish letters first, then lowercase them, then replace lowercase Turkish letters
+    replacements_upper = {
+        'İ': 'i', 'I': 'i', 'Ğ': 'g', 'Ü': 'u', 'Ş': 's', 'Ö': 'o', 'Ç': 'c'
+    }
+    replacements_lower = {
+        'ı': 'i', 'ğ': 'g', 'ü': 'u', 'ş': 's', 'ö': 'o', 'ç': 'c'
+    }
+    for k, v in replacements_upper.items():
+        text = text.replace(k, v)
+    text = text.lower()
+    for k, v in replacements_lower.items():
+        text = text.replace(k, v)
+    # Remove combining dot above if any remained
+    text = text.replace('\u0307', '')
+    return text.strip()
 
 router = APIRouter(prefix="/api", tags=["listings"])
 
@@ -22,6 +45,10 @@ def read_listings(
     max_rooms: int | None = Query(default=None, ge=0),
     min_area: float | None = Query(default=None, ge=0),
     sort_by: str = Query(default="recent"),
+    search: str | None = Query(default=None),
+    keywords: str | None = Query(default=None),
+    context: str | None = Query(default=None),
+    user_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
     if page < 1:
@@ -31,8 +58,42 @@ def read_listings(
 
     query = db.query(Listing).filter(Listing.is_active.is_(True))
 
+    user = None
+    if user_id is not None:
+        user = db.query(User).filter(User.id == user_id).first()
+
+    # Apply user's preferred location filters if not overridden by explicit search parameters
+    if not search and not district and not city and user:
+        if user.district and user.district.strip():
+            query = query.filter(Listing.district_canonical == canonicalize_turkish(user.district))
+        elif user.province and user.province.strip():
+            query = query.filter(Listing.city_canonical == canonicalize_turkish(user.province))
+
     if city:
         query = query.filter(Listing.city_canonical == city.lower())
+
+    if search:
+        s = search.strip()
+        # Detect Turkish room-count pattern: "4+1", "3+1", "2+1", etc.
+        # Only search in title to avoid false positives from descriptions.
+        room_match = re.match(r'^(\d+)\+(\d+)$', s)
+        if room_match:
+            # Exact room-type match in title only (e.g. "4+1")
+            query = query.filter(Listing.title.ilike(f"%{s}%"))
+        else:
+            # Location / project name search.
+            # Intentionally exclude `description` so that an Ankara listing
+            # mentioning "istanbul" in its description does NOT appear when
+            # the user searches for Istanbul.
+            term = f"%{s.lower()}%"
+            query = query.filter(
+                or_(
+                    Listing.title.ilike(term),
+                    Listing.city.ilike(term),
+                    Listing.district.ilike(term),
+                    Listing.neighborhood.ilike(term),
+                )
+            )
     if district:
         query = query.filter(Listing.district_canonical == district.lower())
     if min_price is not None:
@@ -46,22 +107,42 @@ def read_listings(
     if min_area is not None:
         query = query.filter(Listing.area_m2 >= min_area)
 
-    if sort_by == "price_asc":
-        query = query.order_by(asc(Listing.price))
-    elif sort_by == "price_desc":
-        query = query.order_by(desc(Listing.price))
-    elif sort_by == "lifestyle_score":
-        query = query.order_by(desc(Listing.lifestyle_score).nullslast(), desc(Listing.id))
+    if user and sort_by == "personalized":
+        # Load all matching listings to sort in memory
+        all_listings = query.all()
+        # Sort by match score descending
+        all_listings.sort(key=lambda l: calculate_match_score(user, l, db), reverse=True)
+        total = len(all_listings)
+        listings = all_listings[(page - 1) * page_size : page * page_size]
     else:
-        query = query.order_by(Listing.published_at.desc().nullslast(), Listing.id.desc())
+        # Standard database sorting and pagination
+        if sort_by == "price_asc":
+            query = query.order_by(asc(Listing.price))
+        elif sort_by == "price_desc":
+            query = query.order_by(desc(Listing.price))
+        elif sort_by == "lifestyle_score":
+            query = query.order_by(desc(Listing.lifestyle_score).nullslast(), desc(Listing.id))
+        else:
+            query = query.order_by(Listing.published_at.desc().nullslast(), Listing.id.desc())
 
-    total = query.count()
+        total = query.count()
+        listings = (
+            query.offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
 
-    listings = (
-        query.offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
-    )
+    filters = {
+        "district": district,
+        "min_price": min_price,
+        "max_price": max_price,
+        "min_rooms": min_rooms,
+        "max_rooms": max_rooms,
+        "min_area": min_area,
+        "search": search,
+        "keywords": keywords,
+        "context": context,
+    }
 
     items = [
         ListingCardResponse(
@@ -72,6 +153,7 @@ def read_listings(
             area_m2=listing.area_m2,
             room_count_total=listing.room_count_total,
             lifestyle_score=listing.lifestyle_score,
+            match_score=calculate_compatibility_score(listing, filters),
             price_verdict=listing.price_verdict,
             source=listing.source,
             latitude=listing.latitude,
@@ -124,6 +206,13 @@ def search_listings(
         }
         for l in listings
     ]
+
+
+@router.get("/listings/selector", response_model=list[ListingSelectorResponse])
+def get_listings_selector(db: Session = Depends(get_db)):
+    """Get all active listings for selection dropdown."""
+    listings = db.query(Listing).filter(Listing.is_active.is_(True)).order_by(Listing.title.asc()).all()
+    return [{"id": l.id, "title": l.title} for l in listings]
 
 
 @router.get("/listings/{listing_id}", response_model=ListingResponse)

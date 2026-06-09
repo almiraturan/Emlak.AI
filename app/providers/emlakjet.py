@@ -10,6 +10,15 @@ from app.providers.web_utils import extract_json_blocks, fetch_text, first_prese
 from app.services.listing_normalizer import normalize_listing_payload
 
 
+def canonize(s: str | None) -> str:
+    if not s:
+        return ""
+    s = str(s).lower()
+    for a, b in [('ı', 'i'), ('ğ', 'g'), ('ü', 'u'), ('ş', 's'), ('ö', 'o'), ('ç', 'c')]:
+        s = s.replace(a, b)
+    return "".join(c for c in s if c.isalnum())
+
+
 class EmlakjetProvider(ListingProvider):
     name = "emlakjet"
 
@@ -93,6 +102,8 @@ class EmlakjetProvider(ListingProvider):
         first_unit = unit_types[0] if isinstance(unit_types, list) and unit_types and isinstance(unit_types[0], dict) else {}
 
         title = to_str(first_present(node, ["title", "name", "headline", "listingTitle"]))
+        if title is not None and title.upper() in {"CASH", "DELAY", "INTEREST", "INSTALLMENT", "PESIN", "PEŞİN", "VADELI", "VADELİ"}:
+            return None
         price = self._normalize_price(price_obj)
         area_m2 = first_present(node, ["grossSquareMeter", "grossSquareMeters", "m2", "area", "netSquareMeter"])
         if area_m2 is None and isinstance(first_unit, dict):
@@ -195,7 +206,33 @@ class EmlakjetProvider(ListingProvider):
             end = min(len(flattened), url_match.end() + 3000)
             window = flattened[start:end]
 
-            title_match = re.search(r'"name":"([^"]+)"', window)
+            names = re.findall(r'"name":"([^"]+)"', window)
+            title = None
+            blocked_names = {"CASH", "DELAY", "INTEREST", "INSTALLMENT", "PESIN", "PEŞİN", "VADELI", "VADELİ", "KONUT", "DAİRE", "DAIRE", "SATILIK", "SATILIK", "KİRALIK", "KIRALIK"}
+            
+            # 1. Exact canonical match with slug
+            canonical_slug = canonize(slug)
+            for n in names:
+                if canonize(n) == canonical_slug:
+                    title = n
+                    break
+            
+            # 2. Substring match with slug (excluding generic words)
+            if not title:
+                for n in names:
+                    cn = canonize(n)
+                    if cn and cn.upper() not in blocked_names and len(cn) > 3:
+                        if cn in canonical_slug or canonical_slug in cn:
+                            title = n
+                            break
+            
+            # 3. Fallback to first non-blocked name
+            if not title:
+                for n in names:
+                    if n.upper() not in blocked_names:
+                        title = n
+                        break
+
             city_match = re.search(r'"cityName":"([^"]+)"', window)
             district_match = re.search(r'"districtName":"([^"]+)"', window)
             currency_match = re.search(r'"currency":"([^"]+)"', window)
@@ -206,8 +243,6 @@ class EmlakjetProvider(ListingProvider):
             lon_match = re.search(r'"lon":(-?\d+(?:\.\d+)?)', window)
             created_match = re.search(r'"createdAt":"([^"]+)"', window)
             updated_match = re.search(r'"updatedAt":"([^"]+)"', window)
-
-            title = title_match.group(1) if title_match else None
             city = city_match.group(1) if city_match else None
             district = district_match.group(1) if district_match else None
             price = price_match.group(1) if price_match and price_match.group(1) else None
