@@ -26,10 +26,9 @@ def import_kaggle_istanbul(
         if not raw_rows:
             raise HTTPException(status_code=502, detail="Kaggle veri setinden hiç ilan alınamadı.")
 
-        items = [IncomingListingPayload(**row) for row in raw_rows]
         return ingest_listings(
             db,
-            incoming=items,
+            incoming=raw_rows,
             fallback_source="kaggle_istanbul_2026",
             source_id_prefix="KAGGLE",
             full_sync=False,

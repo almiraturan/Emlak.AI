@@ -215,6 +215,10 @@ def seed_demo_user_and_behavior(db: Session) -> None:
 
 
 def seed_listings(db: Session) -> int:
+    from app.core.config import settings
+    if not settings.seed_on_startup:
+        return 0
+
     existing_source_ids = {
         source_id
         for (source_id,) in db.query(Listing.source_listing_id).all()
