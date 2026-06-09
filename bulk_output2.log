@@ -26,3 +26,94 @@ Toplam 116 ilan isleniyor...
 [25/116] ID=1066 HATA
 [26/116] ID=1067 -> 7.1 | sch=9 hos=3 bus=22 park=16
 [27/116] ID=1068 -> 4.4 | sch=11 hos=3 bus=0 park=10
+[28/116] ID=1069 HATA
+[29/116] ID=1070 -> 1.9 | sch=1 hos=1 bus=0 park=0
+[30/116] ID=1071 -> 1.6 | sch=0 hos=1 bus=0 park=0
+[31/116] ID=1072 -> 2.5 | sch=0 hos=0 bus=8 park=0
+[32/116] ID=1073 -> 5.8 | sch=2 hos=2 bus=34 park=11
+[33/116] ID=1074 -> 6.4 | sch=2 hos=3 bus=5 park=8
+[34/116] ID=1075 -> 1.1 | sch=0 hos=0 bus=0 park=0
+[35/116] ID=1076 -> 6.4 | sch=5 hos=2 bus=13 park=25
+[36/116] ID=1077 -> 4.4 | sch=3 hos=3 bus=0 park=8
+[37/116] ID=1082 HATA
+[38/116] ID=1084 -> 3.1 | sch=1 hos=3 bus=2 park=0
+[39/116] ID=1093 -> 5.3 | sch=4 hos=5 bus=17 park=0
+[40/116] ID=1098 -> 6.4 | sch=2 hos=3 bus=5 park=8
+[41/116] ID=1099 -> 1.8 | sch=0 hos=2 bus=0 park=0
+[42/116] ID=1100 -> 6.4 | sch=7 hos=2 bus=10 park=18
+[43/116] ID=1101 -> 3.0 | sch=2 hos=2 bus=0 park=3
+[44/116] ID=1106 -> 3.1 | sch=0 hos=2 bus=9 park=1
+[45/116] ID=1108 HATA
+[46/116] ID=1117 -> 5.9 | sch=4 hos=5 bus=26 park=2
+[47/116] ID=1122 -> 6.4 | sch=2 hos=3 bus=6 park=11
+[48/116] ID=1124 HATA
+[49/116] ID=1125 -> 3.0 | sch=2 hos=2 bus=0 park=3
+[50/116] ID=1130 -> 3.0 | sch=0 hos=2 bus=12 park=0
+[51/116] ID=1132 -> 3.6 | sch=1 hos=3 bus=2 park=0
+[52/116] ID=1141 -> 4.8 | sch=2 hos=5 bus=12 park=0
+[53/116] ID=1322 -> 8.7 | sch=49 hos=29 bus=58 park=21
+[54/116] ID=1324 -> 9.9 | sch=22 hos=14 bus=40 park=26
+[55/116] ID=1325 HATA
+[56/116] ID=1326 -> 6.0 | sch=3 hos=1 bus=33 park=6
+[57/116] ID=1327 -> 9.1 | sch=34 hos=25 bus=58 park=32
+[58/116] ID=1328 HATA
+[59/116] ID=1329 -> 9.9 | sch=22 hos=14 bus=40 park=26
+[60/116] ID=1330 -> 7.8 | sch=23 hos=24 bus=47 park=11
+[61/116] ID=1331 -> 6.0 | sch=3 hos=1 bus=30 park=7
+[62/116] ID=1332 -> 7.9 | sch=52 hos=30 bus=31 park=28
+[63/116] ID=1333 -> 2.8 | sch=0 hos=0 bus=5 park=0
+[64/116] ID=1334 -> 8.9 | sch=19 hos=32 bus=46 park=15
+[65/116] ID=1335 -> 7.9 | sch=21 hos=8 bus=43 park=6
+[66/116] ID=1336 -> 9.9 | sch=29 hos=35 bus=54 park=26
+[67/116] ID=1338 -> 9.9 | sch=18 hos=17 bus=55 park=19
+[68/116] ID=1339 -> 7.0 | sch=15 hos=3 bus=31 park=4
+[69/116] ID=1340 HATA
+[70/116] ID=1341 -> 9.9 | sch=17 hos=9 bus=68 park=39
+[71/116] ID=1342 -> 6.0 | sch=3 hos=1 bus=33 park=6
+[72/116] ID=1343 -> 7.5 | sch=23 hos=10 bus=54 park=16
+[73/116] ID=1344 -> 9.9 | sch=13 hos=15 bus=45 park=16
+[74/116] ID=1345 -> 7.9 | sch=31 hos=28 bus=56 park=13
+[75/116] ID=1346 -> 9.6 | sch=26 hos=26 bus=28 park=11
+[76/116] ID=1347 -> 5.4 | sch=1 hos=9 bus=9 park=1
+[77/116] ID=1348 HATA
+[78/116] ID=1349 -> 9.9 | sch=19 hos=10 bus=77 park=37
+[79/116] ID=1352 -> 6.4 | sch=10 hos=4 bus=2 park=15
+[80/116] ID=1355 -> 7.9 | sch=7 hos=27 bus=31 park=20
+[81/116] ID=1361 -> 6.6 | sch=14 hos=21 bus=0 park=8
+[82/116] ID=1362 -> 9.9 | sch=12 hos=14 bus=36 park=20
+[83/116] ID=1366 -> 7.3 | sch=5 hos=19 bus=27 park=9
+[84/116] ID=1367 HATA
+[85/116] ID=1371 -> 6.1 | sch=1 hos=6 bus=25 park=4
+[86/116] ID=1372 -> 9.9 | sch=26 hos=37 bus=55 park=25
+[87/116] ID=1376 HATA
+[88/116] ID=1377 HATA
+[89/116] ID=1381 -> 7.9 | sch=46 hos=27 bus=54 park=20
+[90/116] ID=1382 HATA
+[91/116] ID=1386 -> 7.2 | sch=1 hos=17 bus=47 park=5
+[92/116] ID=1387 -> 9.9 | sch=10 hos=15 bus=53 park=16
+[93/116] ID=1391 -> 9.9 | sch=20 hos=29 bus=58 park=23
+[94/116] ID=1392 -> 7.1 | sch=7 hos=16 bus=19 park=14
+[95/116] ID=1396 -> 7.3 | sch=7 hos=12 bus=57 park=6
+[96/116] ID=1397 -> 5.4 | sch=0 hos=12 bus=10 park=4
+[97/116] ID=1401 -> 8.6 | sch=6 hos=3 bus=24 park=7
+[98/116] ID=1402 -> 7.7 | sch=11 hos=2 bus=20 park=8
+[99/116] ID=1406 HATA
+[100/116] ID=1407 -> 9.1 | sch=20 hos=22 bus=29 park=7
+[101/116] ID=1442 -> 9.3 | sch=9 hos=15 bus=27 park=12
+[102/116] ID=1444 HATA
+[103/116] ID=1445 -> 7.0 | sch=4 hos=5 bus=3 park=7
+[104/116] ID=1446 -> 9.9 | sch=18 hos=12 bus=31 park=14
+[105/116] ID=1447 HATA
+[106/116] ID=1448 -> 9.2 | sch=14 hos=5 bus=2 park=37
+[107/116] ID=1449 -> 1.0 | sch=0 hos=0 bus=0 park=0
+[108/116] ID=1450 HATA
+[109/116] ID=1452 -> 2.5 | sch=0 hos=4 bus=0 park=0
+[110/116] ID=1455 -> 9.6 | sch=17 hos=6 bus=24 park=37
+[111/116] ID=1456 HATA
+[112/116] ID=1457 -> 7.9 | sch=3 hos=11 bus=13 park=7
+[113/116] ID=1458 -> 9.9 | sch=8 hos=13 bus=25 park=14
+[114/116] ID=1459 HATA
+[115/116] ID=1461 -> 1.0 | sch=0 hos=0 bus=0 park=0
+[116/116] ID=1462 -> 1.6 | sch=1 hos=1 bus=0 park=0
+
+Tamamlandi: 89 guncellendi, 27 basarisiz

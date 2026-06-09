@@ -215,10 +215,11 @@
                 <!-- Dinamik olarak doldurulur -->
             </div>
         </div>
-        <div style="display: flex; align-items: flex-end;">
-            <button class="btn btn-primary" onclick="runFullAnalysis()" style="width: 100%; height: 48px; display: flex; align-items: center; justify-content: center; margin-top: auto;">
+        <div style="display: flex; align-items: flex-end; gap: 0.75rem;">
+            <button class="btn btn-primary" onclick="runFullAnalysis()" style="flex: 1; height: 48px; display: flex; align-items: center; justify-content: center; margin-top: auto;">
                 <span id="analyzeButtonText">📊 Tam Analiz Yap</span>
             </button>
+            <button id="quickSaveBtn" class="detail-save-btn" type="button" title="Kaydet" onclick="toggleQuickSave()" style="display:none; flex-shrink:0; width:48px; height:48px; margin-top:auto;">🤍</button>
         </div>
     </section>
 
@@ -512,6 +513,7 @@
                     document.getElementById('listingId').value = lid;
                     document.getElementById('listingSelectSearch').value = `İlan #${lid}`;
                 }
+                updateQuickSaveStatus(lid);
                 runFullAnalysis();
             } else {
                 document.getElementById('listingId').value = "";
@@ -563,6 +565,7 @@
                         hiddenInput.value = l.id;
                         searchInput.value = l.title;
                         dropdownList.style.display = 'none';
+                        updateQuickSaveStatus(l.id);
                         runFullAnalysis();
                     };
                     dropdownList.appendChild(item);
@@ -804,62 +807,86 @@
 
 
 
-    async function updateSaveButtonStatus(listingId) {
+    function _applySaveState(btn, saved) {
+        if (saved) {
+            btn.classList.add('is-saved');
+            btn.textContent = '❤️';
+            btn.title = 'Kaydedildi';
+        } else {
+            btn.classList.remove('is-saved');
+            btn.textContent = '🤍';
+            btn.title = 'Kaydet';
+        }
+    }
+
+    async function updateQuickSaveStatus(listingId) {
         currentListingId = listingId;
-        const btn = document.getElementById('detailSaveBtn');
+        const btn = document.getElementById('quickSaveBtn');
+        btn.style.display = 'flex';
         try {
             const res = await fetch(`/api/saved/status/${listingId}?user_id=${DEMO_USER_ID}`);
             if (res.ok) {
                 const data = await res.json();
                 isCurrentlySaved = data.saved;
-                if (isCurrentlySaved) {
-                    btn.classList.add('is-saved');
-                    btn.textContent = '❤️';
-                    btn.title = 'Kaydedildi';
-                } else {
-                    btn.classList.remove('is-saved');
-                    btn.textContent = '🤍';
-                    btn.title = 'Kaydet';
-                }
+                _applySaveState(btn, isCurrentlySaved);
             }
         } catch (err) {
             console.warn('Failed to fetch save status', err);
         }
     }
 
-    async function toggleDetailSave() {
-        if (!currentListingId) return;
+    async function updateSaveButtonStatus(listingId) {
+        currentListingId = listingId;
         const btn = document.getElementById('detailSaveBtn');
-        btn.disabled = true;
+        const qBtn = document.getElementById('quickSaveBtn');
         try {
-            if (isCurrentlySaved) {
-                const res = await fetch(`/api/saved/${currentListingId}?user_id=${DEMO_USER_ID}`, { method: 'DELETE' });
-                if (res.ok) {
-                    isCurrentlySaved = false;
-                    btn.classList.remove('is-saved');
-                    btn.textContent = '🤍';
-                    btn.title = 'Kaydet';
-                    showToast('İlan kaydedilenlerden çıkarıldı', 'info');
-                }
-            } else {
-                const res = await fetch('/api/saved', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ listing_id: currentListingId, user_id: DEMO_USER_ID }),
-                });
-                if (res.ok) {
-                    isCurrentlySaved = true;
-                    btn.classList.add('is-saved');
-                    btn.textContent = '❤️';
-                    btn.title = 'Kaydedildi';
-                    showToast('İlan kaydedildi', 'success');
-                }
+            const res = await fetch(`/api/saved/status/${listingId}?user_id=${DEMO_USER_ID}`);
+            if (res.ok) {
+                const data = await res.json();
+                isCurrentlySaved = data.saved;
+                _applySaveState(btn, isCurrentlySaved);
+                _applySaveState(qBtn, isCurrentlySaved);
             }
         } catch (err) {
-            console.warn('Failed to toggle save status', err);
-        } finally {
-            btn.disabled = false;
+            console.warn('Failed to fetch save status', err);
         }
+    }
+
+    async function _doToggleSave() {
+        if (!currentListingId) return;
+        if (isCurrentlySaved) {
+            const res = await fetch(`/api/saved/${currentListingId}?user_id=${DEMO_USER_ID}`, { method: 'DELETE' });
+            if (res.ok) {
+                isCurrentlySaved = false;
+                showToast('İlan kaydedilenlerden çıkarıldı', 'info');
+            }
+        } else {
+            const res = await fetch('/api/saved', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ listing_id: currentListingId, user_id: DEMO_USER_ID }),
+            });
+            if (res.ok) {
+                isCurrentlySaved = true;
+                showToast('İlan kaydedildi', 'success');
+            }
+        }
+        const btns = [document.getElementById('detailSaveBtn'), document.getElementById('quickSaveBtn')];
+        btns.forEach(b => { if (b) _applySaveState(b, isCurrentlySaved); });
+    }
+
+    async function toggleDetailSave() {
+        const btn = document.getElementById('detailSaveBtn');
+        btn.disabled = true;
+        try { await _doToggleSave(); } catch (err) { console.warn('Failed to toggle save status', err); }
+        finally { btn.disabled = false; }
+    }
+
+    async function toggleQuickSave() {
+        const btn = document.getElementById('quickSaveBtn');
+        btn.disabled = true;
+        try { await _doToggleSave(); } catch (err) { console.warn('Failed to toggle save status', err); }
+        finally { btn.disabled = false; }
     }
 
     function showError(message) {

@@ -12,8 +12,12 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-LLM_RETRIES = 3
-LLM_RETRY_DELAY = 2  # seconds
+LLM_RETRIES = 2
+LLM_RETRY_DELAY = 1  # seconds
+
+# Module-level cache: (result, checked_at_epoch)
+_llm_available_cache: tuple[bool, float] = (False, 0.0)
+_LLM_CACHE_TTL = 120  # seconds
 
 
 class BaseAgent:
@@ -23,7 +27,7 @@ class BaseAgent:
         """Initialize the agent."""
         self.model_name = settings.gemini_model
         self.timeout = settings.llm_timeout_seconds
-        
+
         # Configure Gemini API
         if settings.gemini_api_key:
             genai.configure(api_key=settings.gemini_api_key)
@@ -31,15 +35,22 @@ class BaseAgent:
             logger.warning("GEMINI_API_KEY not configured")
 
     def is_llm_available(self) -> bool:
-        """Check if Gemini LLM is available."""
+        """Check if Gemini LLM is available (cached for 120 s to avoid per-call network hits)."""
+        global _llm_available_cache
+        result, checked_at = _llm_available_cache
+        if time.time() - checked_at < _LLM_CACHE_TTL:
+            return result
         try:
             if not settings.gemini_api_key:
+                _llm_available_cache = (False, time.time())
                 return False
-            # Try to list models to verify API key works
             models = genai.list_models()
-            return any(self.model_name in m.name for m in models)
+            available = any(self.model_name in m.name for m in models)
+            _llm_available_cache = (available, time.time())
+            return available
         except Exception as e:
             logger.debug(f"Gemini availability check failed: {e}")
+            _llm_available_cache = (False, time.time())
             return False
 
     def call_llm(self, prompt: str, fallback: Optional[str] = None) -> Optional[str]:

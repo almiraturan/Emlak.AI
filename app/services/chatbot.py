@@ -689,10 +689,13 @@ def _contextual_explanation(context: str, picks: list[Listing]) -> str:
 
 
 _GREETING_PAT = re.compile(
-    r"^(merhaba|selam|hey|iyi gunler|iyi aksam|nasilsin|nasilsiniz|naber|ne haber|nasil yardimci|gunaydın|gunaydin|iyi aksamlar|iyi geceler)\b"
+    r"^(merhaba|selam|hey|iyi gunler|iyi aksam|nasil yardimci|gunaydın|gunaydin|iyi aksamlar|iyi geceler)\b"
 )
 
 _CHITCHAT_MAP = [
+    # Personal greetings / social questions — answer warmly, no search
+    (re.compile(r"^(nasilsin|nasilsiniz|naber|ne haber|iyimisin|iyi misin|nasil gidiyor|ne var ne yok)\b"),
+     "İyiyim, teşekkürler! 😊 Umarım siz de iyisinizdir.\n\nSize nasıl yardımcı olabilirim? Ev arıyorsanız şehir, oda sayısı ve bütçeyi söylemeniz yeterli!"),
     # "kim siniz", "kimsiniz", "kim sin" — space-tolerant
     (re.compile(r"kim\s*sin\w*|ne yapabilirsin\w*|nasil calisin\w*|hakkinda bilgi|nasil kullanilir\w*|ne is yap\w*"),
      "Ben EmlakAI — yapay zeka destekli emlak asistanıyım! 🤖\n\n"
@@ -717,6 +720,80 @@ _CHITCHAT_MAP = [
      "Ne arıyorsunuz?"),
     (re.compile(r"^(cok guzel|muhtesem|muthis|vay|wow|bravo|inanilmaz|super|mukemmel|harika)\b"),
      "Teşekkürler! 😊 Size en uygun evi bulmak için kriterleri söyleyin — şehir, oda sayısı, bütçe?"),
+
+    # Fiyat/piyasa soruları
+    (re.compile(r"fiyatlar?\s*(dusuyor|artacak|yukseliyor|ucuzlayacak|pahalilas|ne\s*olacak|nereye\s*gid)\w*|konut\s*piyasa\w*|emlak\s*piyasa\w*"),
+     "Konut piyasası dinamik bir alan — kesin tahmin yapmak zor. Genel olarak:\n\n"
+     "• Büyük şehir merkezleri (İstanbul, Ankara, İzmir) uzun vadede değer kazanıyor\n"
+     "• Metro/ulaşım yakını semtler daha hızlı değerleniyor\n"
+     "• Yaşam skoru yüksek, okul/hastane yakın mahalleler talep görüyor\n\n"
+     "Yatırım için hangi şehri ve bütçeyi düşünüyorsunuz?"),
+
+    # Hangi semt / şehir karşılaştırması
+    (re.compile(r"hangi\s*(semt|mahalle|ilce|sehir)\w*\s*(daha\s*(iyi|uygun|guzel)|oneriyor\w*|tavsiye)\w*|istanbul\s*mi\s*ankara\s*mi|ankara\s*mi\s*istanbul\s*mi|izmir\s*mi"),
+     "Şehir karşılaştırması için birkaç ipucu:\n\n"
+     "• **İstanbul** — yüksek kira getirisi, yüksek fiyat, kozmopolit yaşam\n"
+     "• **Ankara** — devlet/üniversite şehri, fiyatlar daha uygun, istikrarlı kira\n"
+     "• **İzmir** — iklim avantajı, Ege kültürü, turizm etkisi\n\n"
+     "Hangi şehirde ve hangi kriterlerde (bütçe, oda, okul yakınlığı) arama yapayım?"),
+
+    # Kiralık/satılık farkı
+    (re.compile(r"kiralik\s*mi\s*satilik\s*mi|kiralamak\s*mi\s*almak\s*mi|kira\s*mi\s*satin\s*mi|hangisi\s*(daha\s*)?(iyi|mantikli|avantajli)"),
+     "Kiralık mı satılık mı kararı kişisel koşullara göre değişir:\n\n"
+     "• **Satın al** — uzun vadede oturacaksan, piyasa değer kazanıyor, kira ödemek istemiyorsan\n"
+     "• **Kirala** — kısa süre kalacaksan, sermayeni başka yatırıma yönlendirmek istiyorsan, şehir henüz kesin değilse\n\n"
+     "Satılık mı kiralık mı arıyorsunuz? Şehir ve bütçeniz nedir?"),
+
+    # Deprem güvenliği / yeni bina soruları
+    (re.compile(r"deprem\w*|zemin\s*etud\w*|bina\s*guvenl\w*|yeni\s*bina\s*(daha\s*)?(guvenli|iyi)|dask|sigorta"),
+     "Deprem güvenliği için dikkat edilmesi gerekenler:\n\n"
+     "• 2000 sonrası binaları tercih edin (yeni yönetmeliklere tabi)\n"
+     "• Zemin etüdü raporunu isteyin\n"
+     "• DASK (zorunlu deprem sigortası) mutlaka yaptırın\n"
+     "• 'Yeni bina' veya 'depreme dayanıklı' filtresiyle arayabilirim\n\n"
+     "Yeni binalara odaklanmamı ister misiniz? Şehir ve bütçeniz?"),
+
+    # Tapu / hukuki sorular
+    (re.compile(r"tapu\w*|kat\s*irtifak\w*|iskan\w*|noter\w*|sozlesme\w*|on\s*odeme\w*|pesin\s*mi|taksit\w*|kredi\s*(cekebi|uygun|sart)\w*"),
+     "Tapu ve hukuki süreç hakkında genel bilgi:\n\n"
+     "• **Tapu türleri**: Kat irtifakı (inşaat aşamasında) vs. kat mülkiyeti (iskan alınmış)\n"
+     "• **İskan** (yapı kullanım izni) olmayan binada oturmak riskli\n"
+     "• Kredi kullanacaksanız bankanın ekspertiz şartlarını önceden sorun\n"
+     "• Noterde ön sözleşme yapılırsa cayma tazminatı geçerli\n\n"
+     "Belirli bir ilan için analiz yapmamı ister misiniz?"),
+
+    # Ne zaman / hangi ay / mevsim
+    (re.compile(r"ne\s*zaman\s*(alsam|kiralamam|bakmam|ev\s*al)|hangi\s*(ay|mevsim|donem)\s*(ev\s*)?(almak|kiralamak|bakmak)\w*"),
+     "Ev almak için en uygun dönem:\n\n"
+     "• **Sonbahar (Eylül–Kasım)** — fiyatlar biraz sakinler, satıcılar müzakereye açık\n"
+     "• **Kış (Aralık–Şubat)** — en az rekabet, pazarlık payı yüksek\n"
+     "• Yaz aylarında hareketlilik fazla, fiyatlar baskılı\n\n"
+     "Hangi şehirde, hangi kriterlerde bakıyorsunuz?"),
+
+    # Yatırım soruları
+    (re.compile(r"yatirim\s*(icin|amacli|olarak|yapacagim)\w*|kira\s*getir\w*|kira\s*kazan\w*|pasif\s*gelir|kiraya\s*ver\w*|degerlen\w*"),
+     "Yatırım amaçlı ev için öneriler:\n\n"
+     "• Üniversite yakını — öğrenci kiracı garantisi\n"
+     "• Metro/metrobüs durağı yakını — her zaman talep var\n"
+     "• Yeni gelişen semtler — değer artışı potansiyeli\n"
+     "• Küçük daireler (1+1, 2+1) kira getirisinde daha verimli\n\n"
+     "Hangi şehirde, ne bütçeyle yatırım düşünüyorsunuz?"),
+
+    # Evcil hayvan politikası / apartman
+    (re.compile(r"kopek\s*(kabul|sart|yasak|sorun)\w*|kedi\s*(kabul|sart|yasak)\w*|apartman\s*(evcil|hayvan)\w*|hayvan\s*(dostu|kabul)\w*"),
+     "Evcil hayvanlı kiracı için ipuçları:\n\n"
+     "• Müstakil ev veya villa seçeneklerine bakın — kısıtlama az\n"
+     "• Site yönetmeliğini önceden öğrenin\n"
+     "• Bahçeli daireler köpek için idealdir\n\n"
+     "Park yakını, evcil hayvan dostu ilanları listeleyeyim mi? Hangi şehir?"),
+
+    # Engelli erişimi
+    (re.compile(r"engelli\s*(erisim|uygun|giris|asansor)\w*|tekerlekli\s*sandalye\w*|erisilebilir\w*|rampa\w*"),
+     "Engelli erişimi için dikkat edilmesi gerekenler:\n\n"
+     "• Zemin kat veya asansörlü bina\n"
+     "• Geniş koridor ve kapı genişliği (90 cm+)\n"
+     "• Hastane ve sağlık merkezi yakınlığı\n\n"
+     "Asansörlü, zemin katlı ve hastane yakını ilanları göstereyim mi? Şehir?"),
 ]
 
 

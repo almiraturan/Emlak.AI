@@ -36,11 +36,16 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
     filters = parse_message(req.message)
     text_norm = _strip(req.message)
 
-    # Fast-path: greeting or chitchat — skip DB queries entirely
     is_greeting = bool(_GREETING_PAT.match(text_norm))
     is_chitchat = any(p.search(text_norm) for p, _ in _CHITCHAT_MAP)
     is_no_intent = _is_no_intent(filters)
 
+    # If user opened with "merhaba" but also included search criteria in the same
+    # message, skip the greeting fast-path and process the full search.
+    if is_greeting and not is_no_intent:
+        is_greeting = False
+
+    # Fast-path: pure greeting / chitchat / no extractable intent
     if is_greeting or is_chitchat or is_no_intent:
         reply = build_reply(req.message, filters, [], 0)
         return ChatResponse(
