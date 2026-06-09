@@ -227,51 +227,7 @@
         </div>
 
         <div class="results-container">
-            <!-- Profile Result -->
-            <div class="result-card glass result-profile">
-            <div class="result-header">
-                <h2>Kullanıcı Profili</h2>
-                <span class="result-badge profile">Profile</span>
-            </div>
-            <div class="result-body">
-                <div class="profile-cluster">
-                    <div class="cluster-label" id="clusterLabel">-</div>
-                    <div class="cluster-description" id="clusterDescription">-</div>
-                </div>
-                <div class="profile-metadata">
-                    <div class="metadata-item">
-                        <span class="metadata-label">Toplam Etkileşim:</span>
-                        <span class="metadata-value" id="totalEvents">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Tıklama:</span>
-                        <span class="metadata-value" id="clickCount">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Kaydetme:</span>
-                        <span class="metadata-value" id="saveCount">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Atlama:</span>
-                        <span class="metadata-value" id="skipCount">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Ortalama Kaydedilen Fiyat:</span>
-                        <span class="metadata-value" id="avgSavedPrice">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Atla Oranı:</span>
-                        <span class="metadata-value" id="skipRate">-</span>
-                    </div>
-                    <div class="metadata-item">
-                        <span class="metadata-label">Kaydet Oranı:</span>
-                        <span class="metadata-value" id="saveRate">-</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Lifestyle Result -->
+            <!-- Lifestyle Result -->
         <div class="result-card glass result-lifestyle">
             <div class="result-header">
                 <h2>Yaşam Kalitesi</h2>
@@ -680,24 +636,6 @@
             
             // Check and update save status
             updateSaveButtonStatus(listing.id);
-        }
-
-        // Profile
-        if (data.profile) {
-            document.getElementById('clusterLabel').textContent = 
-                (data.profile.cluster_label || 'Unknown').toUpperCase();
-            document.getElementById('clusterDescription').textContent = 
-                data.profile.description || '-';
-            const meta = data.profile.metadata || {};
-            const setText = (id, v) => { document.getElementById(id).textContent = v; };
-            setText('totalEvents', meta.total_events ?? 0);
-            setText('clickCount', meta.click_count ?? 0);
-            setText('saveCount', meta.save_count ?? 0);
-            setText('skipCount', meta.skip_count ?? 0);
-            setText('avgSavedPrice',
-                meta.avg_saved_price ? `₺${Math.round(meta.avg_saved_price).toLocaleString('tr-TR')}` : '₺0');
-            setText('skipRate', `${((meta.skip_rate ?? 0) * 100).toFixed(1)}%`);
-            setText('saveRate', `${((meta.save_rate ?? 0) * 100).toFixed(1)}%`);
         }
 
         // Lifestyle

@@ -348,28 +348,30 @@
 
 {% block extra_js %}
 <script>
+    const PAGE_SIZE = 12;
     let allListings = [];
+    let filteredListings = [];
+    let currentPage = 1;
 
     document.addEventListener('DOMContentLoaded', async () => {
         await loadListings();
-        
-        document.getElementById('searchInput').addEventListener('input', filterListings);
-        document.getElementById('sortSelect').addEventListener('change', filterListings);
+        document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; filterListings(); });
+        document.getElementById('sortSelect').addEventListener('change', () => { currentPage = 1; filterListings(); });
     });
 
     async function loadListings() {
         try {
-            const response = await fetch('/api/listings');
+            const response = await fetch('/api/listings?page_size=250');
             if (response.ok) {
                 const data = await response.json();
                 allListings = Array.isArray(data) ? data : (data.items || []);
-                displayListings(allListings);
+                filterListings();
             } else {
                 throw new Error('Failed to load listings');
             }
         } catch (error) {
             console.error('Error loading listings:', error);
-            document.getElementById('listingsGrid').innerHTML = 
+            document.getElementById('listingsGrid').innerHTML =
                 `<div class="error-message">Hata: ${error.message}</div>`;
         }
     }
@@ -381,49 +383,99 @@
         let filtered = allListings.filter(listing => {
             const title = (listing.title || '').toLowerCase();
             const district = (listing.district || '').toLowerCase();
-            return title.includes(searchTerm) || district.includes(searchTerm);
+            const city = (listing.city || '').toLowerCase();
+            return title.includes(searchTerm) || district.includes(searchTerm) || city.includes(searchTerm);
         });
 
-        // Sort
         switch(sortBy) {
-            case 'price-asc':
-                filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
-                break;
-            case 'price-desc':
-                filtered.sort((a, b) => (b.price || 0) - (a.price || 0));
-                break;
-            case 'lifestyle':
-                filtered.sort((a, b) => (b.lifestyle_score || 0) - (a.lifestyle_score || 0));
-                break;
-            case 'recent':
-            default:
-                filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            case 'price-asc':  filtered.sort((a, b) => (a.price || 0) - (b.price || 0)); break;
+            case 'price-desc': filtered.sort((a, b) => (b.price || 0) - (a.price || 0)); break;
+            case 'lifestyle':  filtered.sort((a, b) => (b.lifestyle_score || 0) - (a.lifestyle_score || 0)); break;
+            default:           filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         }
 
-        displayListings(filtered);
+        filteredListings = filtered;
+        displayPage();
     }
 
-    function displayListings(listings) {
+    function displayPage() {
         const grid = document.getElementById('listingsGrid');
         const noResults = document.getElementById('noResults');
+        const total = filteredListings.length;
+        const totalPages = Math.ceil(total / PAGE_SIZE);
+        currentPage = Math.max(1, Math.min(currentPage, totalPages || 1));
 
-        if (listings.length === 0) {
+        if (total === 0) {
             grid.style.display = 'none';
             noResults.style.display = 'block';
+            renderPagination(0, 0);
             return;
         }
 
+        const start = (currentPage - 1) * PAGE_SIZE;
+        const page = filteredListings.slice(start, start + PAGE_SIZE);
+
         grid.style.display = 'grid';
         noResults.style.display = 'none';
-        grid.innerHTML = listings.map(listing => createListingCard(listing)).join('');
+        grid.innerHTML = page.map(listing => createListingCard(listing)).join('');
 
-        // Add animation
-        const cards = grid.querySelectorAll('.listing-card');
-        cards.forEach((card, index) => {
+        grid.querySelectorAll('.listing-card').forEach((card, i) => {
             card.style.animation = `slideInUp 0.4s ease forwards`;
-            card.style.animationDelay = `${index * 0.05}s`;
+            card.style.animationDelay = `${i * 0.04}s`;
         });
+
+        renderPagination(totalPages, total);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    function renderPagination(totalPages, total) {
+        let el = document.getElementById('paginationBar');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'paginationBar';
+            el.style.cssText = 'display:flex;align-items:center;justify-content:center;gap:1rem;margin:2rem 0 1rem;flex-wrap:wrap;';
+            document.getElementById('listingsGrid').insertAdjacentElement('afterend', el);
+        }
+        if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+        const makeBtn = (label, page, disabled, active) => {
+            const btn = document.createElement('button');
+            btn.textContent = label;
+            btn.disabled = disabled;
+            btn.style.cssText = `padding:0.45rem 1rem;border-radius:8px;border:1px solid ${active ? '#00d4aa' : 'rgba(255,255,255,0.12)'};background:${active ? 'rgba(0,212,170,0.18)' : 'rgba(255,255,255,0.04)'};color:${active ? '#00d4aa' : '#ccc'};cursor:${disabled ? 'default' : 'pointer'};font-size:0.85rem;opacity:${disabled ? 0.4 : 1};`;
+            if (!disabled && !active) btn.onmouseenter = () => btn.style.background = 'rgba(0,212,170,0.08)';
+            if (!disabled && !active) btn.onmouseleave = () => btn.style.background = 'rgba(255,255,255,0.04)';
+            if (!disabled) btn.onclick = () => { currentPage = page; displayPage(); };
+            return btn;
+        };
+
+        el.innerHTML = '';
+        el.appendChild(makeBtn('← Önceki', currentPage - 1, currentPage === 1, false));
+
+        const range = [];
+        for (let p = 1; p <= totalPages; p++) {
+            if (p === 1 || p === totalPages || (p >= currentPage - 2 && p <= currentPage + 2)) range.push(p);
+            else if (range[range.length - 1] !== '…') range.push('…');
+        }
+        range.forEach(p => {
+            if (p === '…') {
+                const s = document.createElement('span');
+                s.textContent = '…'; s.style.color = '#666';
+                el.appendChild(s);
+            } else {
+                el.appendChild(makeBtn(p, p, false, p === currentPage));
+            }
+        });
+
+        el.appendChild(makeBtn('Sonraki →', currentPage + 1, currentPage === totalPages, false));
+
+        const info = document.createElement('span');
+        info.textContent = `${total} ilandan ${(currentPage-1)*PAGE_SIZE+1}–${Math.min(currentPage*PAGE_SIZE, total)} gösteriliyor`;
+        info.style.cssText = 'font-size:0.8rem;color:#64748b;width:100%;text-align:center;margin-top:0.25rem;';
+        el.appendChild(info);
+    }
+
+    function displayListings(listings) { filteredListings = listings; displayPage(); }
 
     function createListingCard(listing) {
         const lifestyleScore = typeof listing.lifestyle_score === 'number' ? listing.lifestyle_score : null;

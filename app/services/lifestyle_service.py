@@ -194,6 +194,10 @@ async def update_listing_lifestyle_score(listing_id: int):
         # Fetch nearby places
         places = await fetch_nearby_places(listing.latitude, listing.longitude)
 
+        # Skip if API returned nothing — likely a timeout/rate-limit, not truly 0 POIs
+        if not places:
+            return
+
         # Categorize POIs
         poi_counts = categorize_pois(places)
 

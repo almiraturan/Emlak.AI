@@ -26,7 +26,7 @@ class EmlakjetProvider(ListingProvider):
         return settings.emlakjet_search_url
 
     def _max_items(self) -> int:
-        return 100
+        return 20
 
     def _timeout(self) -> int:
         return settings.provider_request_timeout_seconds
@@ -120,7 +120,7 @@ class EmlakjetProvider(ListingProvider):
         except Exception:
             pass
 
-        return self._generate_mock_emlakjet_listings()[: self._max_items()]
+        return []
 
     def fetch_listing_detail(self, source_listing_id: str) -> RawListingPayload | None:
         _ = source_listing_id
