@@ -609,6 +609,50 @@
             setText('saveRate', `${((meta.save_rate ?? 0) * 100).toFixed(1)}%`);
         }
 
+        // Lifestyle
+        if (data.lifestyle) {
+            displayLifestyle(data.lifestyle);
+        }
+
+        // Price
+        if (data.price) {
+            const predicted = Math.round(data.price.predicted_price);
+            const actual = Math.round(data.price.actual_price);
+            document.getElementById('predictedPrice').textContent = `₺${predicted.toLocaleString('tr-TR')}`;
+            document.getElementById('actualPrice').textContent = `₺${actual.toLocaleString('tr-TR')}`;
+
+            const verdict = data.price.verdict || 'fair';
+            let verdictText = 'Adil Fiyat';
+            let verdictClass = 'fair';
+            if (verdict === 'overpriced') { verdictText = 'Pahalı'; verdictClass = 'overpriced'; }
+            else if (verdict === 'underpriced') { verdictText = 'Ucuz'; verdictClass = 'underpriced'; }
+
+            document.getElementById('priceVerdict').textContent = verdictText;
+            document.getElementById('priceVerdict').className = `verdict-badge ${verdictClass}`;
+
+            const diff = data.price.difference_pct;
+            document.getElementById('priceDifferenceText').textContent =
+                `${diff > 0 ? '+' : ''}${diff.toFixed(1)}% ${diff > 0 ? 'daha pahalı' : 'daha ucuz'}`;
+        }
+
+        // Recommendation
+        if (data.recommendation) {
+            const topRecommendations = data.recommendation.top_10 || [];
+            if (topRecommendations.length > 0) {
+                const score = Math.round(topRecommendations[0].match_score * 10);
+                document.getElementById('matchPercentage').textContent = `%${score}`;
+                document.getElementById('matchDescription').textContent =
+                    topRecommendations[0].description || 'Tavsiye edilir';
+            }
+        }
+
+        // Duration
+        if (data.total_duration_ms) {
+            document.getElementById('analysisDuration').textContent =
+                Math.round(data.total_duration_ms);
+        }
+    }
+
     function formatPoiNames(items, nearest) {
         if (!Array.isArray(items) || items.length === 0) return '—';
         const nearestStr = nearest !== null && nearest !== undefined
@@ -688,50 +732,7 @@
             `Okul: ${radii.school ?? 1} km  ·  Hastane: ${radii.hospital ?? 3} km  ·  Otobüs: ${radii.bus ?? 1} km  ·  Metro: ${radii.subway ?? 1} km  ·  Park: ${radii.park ?? 1} km`;
     }
 
-    function displayResults(data) {
-        // Lifestyle
-        if (data.lifestyle) {
-            displayLifestyle(data.lifestyle);
-        }
 
-        // Price
-        if (data.price) {
-            const predicted = Math.round(data.price.predicted_price);
-            const actual = Math.round(data.price.actual_price);
-            document.getElementById('predictedPrice').textContent = `₺${predicted.toLocaleString('tr-TR')}`;
-            document.getElementById('actualPrice').textContent = `₺${actual.toLocaleString('tr-TR')}`;
-
-            const verdict = data.price.verdict || 'fair';
-            let verdictText = 'Adil Fiyat';
-            let verdictClass = 'fair';
-            if (verdict === 'overpriced') { verdictText = 'Pahalı'; verdictClass = 'overpriced'; }
-            else if (verdict === 'underpriced') { verdictText = 'Ucuz'; verdictClass = 'underpriced'; }
-
-            document.getElementById('priceVerdict').textContent = verdictText;
-            document.getElementById('priceVerdict').className = `verdict-badge ${verdictClass}`;
-
-            const diff = data.price.difference_pct;
-            document.getElementById('priceDifferenceText').textContent =
-                `${diff > 0 ? '+' : ''}${diff.toFixed(1)}% ${diff > 0 ? 'daha pahalı' : 'daha ucuz'}`;
-        }
-
-        // Recommendation
-        if (data.recommendation) {
-            const topRecommendations = data.recommendation.top_10 || [];
-            if (topRecommendations.length > 0) {
-                const score = Math.round(topRecommendations[0].match_score * 10);
-                document.getElementById('matchPercentage').textContent = `%${score}`;
-                document.getElementById('matchDescription').textContent =
-                    topRecommendations[0].description || 'Tavsiye edilir';
-            }
-        }
-
-        // Duration
-        if (data.total_duration_ms) {
-            document.getElementById('analysisDuration').textContent =
-                Math.round(data.total_duration_ms);
-        }
-    }
 
     async function updateSaveButtonStatus(listingId) {
         currentListingId = listingId;
