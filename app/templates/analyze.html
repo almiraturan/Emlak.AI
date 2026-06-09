@@ -68,6 +68,97 @@
         font-size: 0.85rem;
         font-style: italic;
     }
+
+    /* ── Single-column layout ── */
+    #resultsContainer .results-container {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 1.5rem !important;
+    }
+    #resultsContainer .result-card {
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    /* ── POI grid: 2–3 columns inside card ── */
+    .poi-counts {
+        display: grid !important;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+        gap: 1rem !important;
+        margin-top: 1.25rem;
+    }
+    .poi-item {
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 12px;
+        padding: 1rem 1.1rem;
+    }
+    .poi-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 0.4rem;
+    }
+    .poi-icon { font-size: 1.2rem; }
+    .poi-name { font-weight: 600; font-size: 0.9rem; color: #e2e8f0; flex: 1; }
+    .poi-count {
+        background: rgba(0,212,170,0.15);
+        color: #00d4aa;
+        font-weight: 700;
+        font-size: 0.85rem;
+        padding: 0.15rem 0.55rem;
+        border-radius: 999px;
+        min-width: 1.8rem;
+        text-align: center;
+    }
+    .poi-count.zero { background: rgba(255,255,255,0.06); color: #666; }
+    .poi-nearest {
+        font-size: 0.8rem;
+        color: #00d4aa;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+    .poi-nearest.not-found { color: #666; font-style: italic; }
+    .poi-list {
+        font-size: 0.78rem;
+        color: #94a3b8;
+        line-height: 1.6;
+    }
+    .school-filters {
+        display: flex;
+        gap: 0.3rem;
+        flex-wrap: wrap;
+        margin: 0.4rem 0;
+    }
+    .school-filter-btn {
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        color: #94a3b8;
+        border-radius: 6px;
+        padding: 0.15rem 0.45rem;
+        font-size: 0.72rem;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .school-filter-btn.active {
+        background: rgba(16,185,129,0.18);
+        border-color: rgba(16,185,129,0.4);
+        color: #6ee7b7;
+    }
+    /* Lifestyle score + meta row */
+    .lifestyle-top {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        margin-bottom: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .lifestyle-meta {
+        font-size: 0.8rem;
+        color: #64748b;
+        margin-top: 0.5rem;
+        line-height: 1.6;
+    }
 </style>
 {% endblock %}
 

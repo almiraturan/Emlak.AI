@@ -61,16 +61,25 @@ _CENTRAL_WORDS = ("merkez", "merkezi", "sehir merkezi", "istanbulun icinde", "se
 _LUXURY_WORDS = ("luks", "premium", "pahali", "villa", "rezidans", "ozel proje", "butik proje")
 _BUDGET_WORDS = ("ucuz", "uygun fiyat", "ekonomik", "az para", "butce", "hesapli")
 _INVEST_WORDS = ("yatirim", "yatirimlik", "kira getirisi", "deger kazanir", "kiralik potansiyel")
-_PET_WORDS = ("kopek", "kedi", "evcil hayvan", "hayvan")
+_PET_WORDS = ("kopek", "kopeg", "kedi", "evcil hayvan", "hayvan", "kopegim", "kedim", "kopegimiz")
 _STUDENT_WORDS = ("ogrenci", "universite", "universitesi", "ders", "kampus")
 _REMOTE_WORDS = ("evden calis", "uzaktan calis", "home office", "calisma odasi", "calismak icin")
 _NATURE_WORDS = ("orman", "yesil alan", "doga", "agac", "nehir", "koy", "bahceli semt")
 _NIGHTLIFE_WORDS = ("gece hayati", "bar", "eglence mekan", "kafe cok", "alisveris merkez")
 _FAMILY_WORDS = ("aile", "cocuklu", "genis aile", "buyuk aile", "ebeveyn")
 _ELDERLY_WORDS = ("yasli", "emekli", "nine", "dede", "buyukanne", "buyukbaba")
-_METRO_WORDS = ("metro", "metrobus", "tramvay", "rayli sistem", "metro duragi", "tren")
-_BUS_WORDS = ("otobus", "dolmus", "minibus", "otobus duragi")
-_TRANSPORT_WORDS = ("ulasim", "toplu tasima", "durak", "istasyon")
+_SICK_WORDS = ("hasta", "yatalak", "engelli", "kronik", "bakim ihtiyac", "duzensiz saglik", "saglik sorunu")
+
+# Pattern: sick/disabled/elderly family member → hospital nearby
+_SICK_FAMILY_PAT = re.compile(
+    r"(?:annem|babam|annemiz|babamiz|esim|kardesim|ninemi?|dedem|"
+    r"buyukanne\w*|buyukbaba\w*|aile\w*|halam|amcam|teyze\w*)\w*"
+    r"\s*(?:hasta|yatalak|engelli|kronik|bakim|saglik|tedavi|ilaç|ilac)"
+    r"|(?:hasta|yatalak|engelli)\s*(?:annem|babam|esim|kardesim|aile\w*)"
+)
+_METRO_WORDS = ("metro", "metrobus", "tramvay", "rayli sistem", "metro duragi", "tren", "metroya", "metrodan", "tramvaya")
+_BUS_WORDS = ("otobus", "dolmus", "minibus", "otobus duragi", "otobuse", "otobusle", "dolmusa")
+_TRANSPORT_WORDS = ("ulasim", "toplu tasima", "durak", "istasyon", "toplu tasimaya", "toplu tasimayla", "tasimaya biniyorum", "tasimayla gidiyorum")
 _NEWLYWED_WORDS = ("yeni evli", "yeni evlendik", "nisanliyiz", "nisanlandi", "evleniyoruz", "evliyoruz", "cift olarak", "iki kisilik yasam")
 
 # Turkish number words → int (Turkish only)
@@ -258,28 +267,36 @@ def parse_message(message: str) -> ChatFilters:
             f.context = "newlywed"
 
     # --- Children (number-aware) ---
-    # "3 çocuğum", "iki tane çocuk", "birkaç çocuk", "çocuklarım var"
     n_kids = None
-    child_matches = re.findall(_NUM_PAT + r"\s*(?:tane\s*)?(?:cocuk|kiz|oglan|oglu|ogul|bebek|torun|cocugum|cocuklarim|evlat)", text)
+
+    # Step 1: explicit counts — "2 çocuğum", "bir kızım", "iki oğlum", "3 evladım"
+    child_root = r"(?:cocuk|kiz|oglan|oglu|ogul|ogull|bebek|torun|cocugum|cocuklarim|evlat|evlad)"
+    child_matches = re.findall(_NUM_PAT + r"\s*(?:tane\s*)?" + child_root, text)
     if child_matches:
         n_kids = sum(_parse_num(m) or 1 for m in child_matches)
-    else:
-        # Check for individual singular child mentions without numbers, e.g. "kızım ve oğlum var"
-        singular_mentions = 0
-        if re.search(r"\b(?:kizim|kizi)\b", text):
-            singular_mentions += 1
-        if re.search(r"\b(?:oglum|oglu)\b", text):
-            singular_mentions += 1
-        if re.search(r"\b(?:cocugum|cocugu)\b", text):
-            singular_mentions += 1
-        if re.search(r"\b(?:bebegim|bebegi)\b", text):
-            singular_mentions += 1
-        
-        if singular_mentions > 0:
-            n_kids = singular_mentions
+
+    # Step 2: singular possessives with no number — "kızım var", "oğlum var", "evladım"
+    if n_kids is None:
+        singular = 0
+        for pat, count in [
+            (r"\bkizim\b",       1),
+            (r"\bkizlarim\b",    2),   # plural → ≥2
+            (r"\boglum\b",       1),
+            (r"\bogullarim\b",   2),
+            (r"\bcocugum\b",     1),
+            (r"\bcocuklarim\b",  2),
+            (r"\bebegim\b",      1),
+            (r"\bevladim\b",     1),
+            (r"\bevlatlarim\b",  2),
+            (r"\btorunum\b",     1),
+        ]:
+            if re.search(pat, text):
+                singular += count
+        if singular > 0:
+            n_kids = singular
         elif re.search(r"birka[c]\s*(?:tane\s*)?(?:cocuk|kiz|torun)", text):
             n_kids = 2
-        elif re.search(r"(?:cocugum|cocuklarim|kucuk cocuklar?)\s*var", text):
+        elif re.search(r"(?:cocugum|cocuklarim|kucuk\s*cocuklar?)\s*var", text):
             n_kids = 1
 
     if n_kids is not None:
@@ -310,15 +327,20 @@ def parse_message(message: str) -> ChatFilters:
             f.keywords.append(f"{n_people} kişilik aile")
             f.context = "family"
 
-    # --- Elderly care (number-aware) ---
-    # "2 yaşlı", "annem babam için", "büyükannem var", "yatalak annem"
+    # --- Elderly / sick care (number-aware) ---
     elderly_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:yasli|emekli|buyukanne|buyukbaba|nine|dede)", text)
     has_elderly_rel = bool(re.search(
         r"(?:annem|babam|annemin|babamin|anne.*baba|baba.*anne|buyukanne|buyukbaba|nine|dedem|yatalak)",
         text,
     ))
-    if elderly_m or has_elderly_rel:
-        n_elderly = _parse_num((elderly_m.group(1) if elderly_m else None) or "2") or 2
+    has_sick_rel = bool(_SICK_FAMILY_PAT.search(text))
+    # standalone sick words only when family context exists
+    has_sick_standalone = any(w in text for w in _SICK_WORDS) and any(
+        w in text for w in ("annem", "babam", "aile", "anne", "baba", "nine", "dede", "esim", "kardes")
+    )
+
+    if elderly_m or has_elderly_rel or has_sick_rel or has_sick_standalone:
+        n_elderly = _parse_num((elderly_m.group(1) if elderly_m else None) or "1") or 1
         implied_rooms = max(n_elderly + 1, 2)
         if f.min_rooms is None or f.min_rooms < implied_rooms:
             f.min_rooms = implied_rooms
@@ -327,14 +349,14 @@ def parse_message(message: str) -> ChatFilters:
             if kw not in f.keywords:
                 f.keywords.append(kw)
         f.context = "elderly_care"
-        f.needs_hospital_nearby = True  # NEW: POI requirement
+        f.needs_hospital_nearby = True
     elif any(w in text for w in _ELDERLY_WORDS):
         f.keywords.append("yaşlı dostu")
         if f.min_rooms is None:
             f.min_rooms = 2
         f.min_lifestyle = 6.0
         f.context = "elderly"
-        f.needs_hospital_nearby = True  # NEW: POI requirement
+        f.needs_hospital_nearby = True
 
     # --- Remote work ---
     if any(w in text for w in _REMOTE_WORDS):
@@ -517,7 +539,11 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
     if filters.max_area is not None:
         q = q.filter(Listing.area_m2 <= filters.max_area)
     if filters.min_lifestyle is not None:
-        q = q.filter(Listing.lifestyle_score >= filters.min_lifestyle)
+        from sqlalchemy import or_
+        q = q.filter(
+            or_(Listing.lifestyle_score >= filters.min_lifestyle,
+                Listing.lifestyle_score.is_(None))
+        )
     if filters.max_building_age is not None:
         q = q.filter(Listing.building_age <= filters.max_building_age)
 
@@ -622,7 +648,8 @@ _GREETING_PAT = re.compile(
 )
 
 _CHITCHAT_MAP = [
-    (re.compile(r"kimsin\w*|ne yapabilirsin\w*|nasil calisin\w*|hakkinda bilgi|nasil kullanilir\w*"),
+    # "kim siniz", "kimsiniz", "kim sin" — space-tolerant
+    (re.compile(r"kim\s*sin\w*|ne yapabilirsin\w*|nasil calisin\w*|hakkinda bilgi|nasil kullanilir\w*|ne is yap\w*"),
      "Ben EmlakAI — yapay zeka destekli emlak asistanıyım! 🤖\n\n"
      "Şunları yapabilirim:\n"
      "• Kriterlerinize göre ev bulma (şehir, oda, bütçe)\n"
@@ -630,11 +657,12 @@ _CHITCHAT_MAP = [
      "• Yaşam kalitesi skoru (çevre, yeşil alan, metro)\n"
      "• Çevredeki okul, hastane, otobüs/metro mesafesi\n\n"
      "Hangi şehirde, kaç oda arıyorsunuz?"),
-    (re.compile(r"tesekkur\w*|sagol|eyvallah"),
+    (re.compile(r"\b(tesekkur\w*|sagol|eyvallah)\b"),
      "Rica ederim! 😊 Başka bir ev aramanıza yardımcı olabilir miyim?"),
-    (re.compile(r"^(tamam|peki|anladim\w*|tamamdir|oldu|anlasild\w*)$"),
+    # single-word acknowledgements — word-boundary based, not full-string anchors
+    (re.compile(r"^(tamam|peki|anladim|anladik|tamamdir|oldu|anlasild\w*)\b"),
      "Harika! 😊 Başka bir şey aramak ister misiniz?\n\nÖrnek: *'Ankara'da 3+1, max 5 milyon'*"),
-    (re.compile(r"^(yardim|help)$"),
+    (re.compile(r"^(yardim|help)\b"),
      "Tabii! Şu şekilde arama yapabilirsiniz:\n\n"
      "• Konum: *Kadıköy'de daire*\n"
      "• Oda: *3+1*, *en az 2 oda*\n"
@@ -642,7 +670,7 @@ _CHITCHAT_MAP = [
      "• Özellik: *metro yakını*, *yeni bina*, *bahçeli*\n"
      "• Aile: *2 çocuğum var*, *annem için*\n\n"
      "Ne arıyorsunuz?"),
-    (re.compile(r"^(cok guzel|muhtesem|muthis|vay|wow|bravo|inanilmaz|super|mukemmel|harika)$"),
+    (re.compile(r"^(cok guzel|muhtesem|muthis|vay|wow|bravo|inanilmaz|super|mukemmel|harika)\b"),
      "Teşekkürler! 😊 Size en uygun evi bulmak için kriterleri söyleyin — şehir, oda sayısı, bütçe?"),
 ]
 
@@ -728,7 +756,7 @@ def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total:
 
 def _llm_explain(message: str, filters: ChatFilters, picks: list[Listing], total: int) -> Optional[str]:
     agent = BaseAgent()
-    if not agent.is_ollama_available():
+    if not agent.is_llm_available():
         return None
     
     def format_listing_for_llm(l):
@@ -779,7 +807,7 @@ def analyze_user_input(message: str) -> dict:
         }
     """
     agent = BaseAgent()
-    if not agent.is_ollama_available():
+    if not agent.is_llm_available():
         return {
             'intent': 'buy',
             'lifecycle': 'unknown',
