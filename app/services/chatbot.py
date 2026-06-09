@@ -105,6 +105,7 @@ class ChatFilters:
     max_price: Optional[float] = None
     min_rooms: Optional[int] = None
     max_rooms: Optional[int] = None
+    ideal_rooms: Optional[int] = None   # exact target from household size
     min_area: Optional[float] = None
     max_area: Optional[float] = None
     min_lifestyle: Optional[float] = None
@@ -112,7 +113,7 @@ class ChatFilters:
     sort_by: str = "lifestyle_score"
     keywords: list[str] = field(default_factory=list)
     context: str = ""
-    
+
     # POI-based filtering (for pets, children, elderly, health)
     needs_park_nearby: bool = False
     needs_playground_nearby: bool = False
@@ -299,22 +300,46 @@ def parse_message(message: str) -> ChatFilters:
         elif re.search(r"(?:cocugum|cocuklarim|kucuk\s*cocuklar?)\s*var", text):
             n_kids = 1
 
+    # --- Household member counts for ideal room sizing ---
+    n_parents_hh = 0
+    if re.search(r'\bannem\w*\b', text):
+        n_parents_hh += 1
+    if re.search(r'\bbabam\w*\b', text):
+        n_parents_hh += 1
+    if re.search(r'\banne\s+baba\b', text) and n_parents_hh == 0:
+        n_parents_hh = 2
+
+    n_grandparents_hh = 0
+    if re.search(r'\b(anneanne\w*|babaanne\w*|buyukannem?\w*|ninemiz?\w*)\b', text):
+        n_grandparents_hh += 1
+    if re.search(r'\b(dedem\w*|dede\w*|buyukbaba\w*)\b', text):
+        n_grandparents_hh += 1
+
     if n_kids is not None:
-        if f.min_rooms is None or f.min_rooms < n_kids:
-            f.min_rooms = n_kids
+        kids = n_kids
+        parents = n_parents_hh if n_parents_hh > 0 else 1
+        total_people = kids + parents + n_grandparents_hh
+        ideal = total_people + 1  # +1 for salon
+        f.ideal_rooms = ideal
+        if f.min_rooms is None or f.min_rooms < ideal - 1:
+            f.min_rooms = max(1, ideal - 1)
+        if f.max_rooms is None:
+            f.max_rooms = ideal + 1
         f.min_lifestyle = max(f.min_lifestyle or 0, 7.5)
         if "okul yakını" not in f.keywords:
             f.keywords.extend(["okul yakını", f"{n_kids} çocuklu"])
         f.context = "family_kids"
-        f.needs_school_nearby = True  # NEW: POI requirement
-        f.needs_playground_nearby = True  # NEW: POI requirement
+        f.needs_school_nearby = True
+        f.needs_playground_nearby = True
     elif any(w in text for w in _FAMILY_WORDS):
         f.keywords.append("aileye uygun")
         if f.min_rooms is None:
             f.min_rooms = 3
+        if f.max_rooms is None:
+            f.max_rooms = 6
         f.min_lifestyle = 7.5
         f.context = "family"
-        f.needs_school_nearby = True  # NEW: POI requirement
+        f.needs_school_nearby = True
 
     # --- Household size: "4 kişilik aile", "5 kişi" ---
     household_m = re.search(_NUM_PAT + r"\s*(?:tane\s*)?(?:kisilik|kisili|kisi)\s*(?:aile|ev|hane)?", text)
@@ -550,18 +575,18 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
     # If the user has specific school or hospital requirements, fetch more candidates and sort by POI distance
     is_hospital_req = filters.context == "elderly_care" or "hastane yakını" in filters.keywords
     is_school_req = filters.context == "family_kids" or "okul yakını" in filters.keywords
-    
+
     if is_hospital_req or is_school_req:
-        # Fetch up to 30 matching listings sorted by lifestyle score to run POI distance sorting on
         candidates = q.order_by(desc(Listing.lifestyle_score)).limit(30).all()
         valid_coords = [(c.latitude, c.longitude) for c in candidates if c.latitude and c.longitude]
         if valid_coords:
             center_lat = sum(x[0] for x in valid_coords) / len(valid_coords)
             center_lon = sum(x[1] for x in valid_coords) / len(valid_coords)
-            
             poi_type = "hospital" if is_hospital_req else "school"
             candidates = sort_listings_by_poi_distance(candidates, poi_type, center_lat, center_lon)
-            return candidates[:limit]
+        result = candidates
+        _apply_ideal_room_sort(result, filters)
+        return result[:limit]
 
     # Standard sorting
     if filters.sort_by == "price_asc":
@@ -571,8 +596,6 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
     else:
         q = q.order_by(desc(Listing.lifestyle_score).nullslast(), asc(Listing.price))
 
-    # Get more results than needed if POI filtering is required
-    # (some may be filtered out)
     fetch_limit = limit * 3 if any([
         filters.needs_park_nearby,
         filters.needs_playground_nearby,
@@ -580,7 +603,7 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
         filters.needs_hospital_nearby,
         filters.needs_bus_metro_nearby,
     ]) else limit
-    
+
     all_listings = q.limit(fetch_limit).all()
 
     # Apply POI filtering if needed
@@ -603,9 +626,31 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
                     lat, lon = centroid
             if _check_poi_requirements_with_coords(listing, filters, lat, lon):
                 filtered.append(listing)
-        return filtered[:limit]
+        result = filtered
+    else:
+        result = all_listings
 
-    return all_listings[:limit]
+    _apply_ideal_room_sort(result, filters)
+    return result[:limit]
+
+
+def _apply_ideal_room_sort(listings: list, filters: "ChatFilters") -> None:
+    """Sort in-place: exact room match first, then within budget, then lifestyle (for pets)."""
+    if not listings or filters.ideal_rooms is None:
+        return
+
+    ideal = filters.ideal_rooms
+    max_p = filters.max_price
+    has_pet = filters.needs_park_nearby
+
+    def _key(l):
+        rooms = l.room_count_total or 0
+        room_diff = abs(rooms - ideal)
+        over_budget = int(max_p is not None and float(l.price) > float(max_p))
+        neg_lifestyle = -(float(l.lifestyle_score or 0)) if has_pet else 0.0
+        return (room_diff, over_budget, neg_lifestyle)
+
+    listings.sort(key=_key)
 
 
 def _format_price(price) -> str:
@@ -619,7 +664,7 @@ def _contextual_explanation(context: str, picks: list[Listing]) -> str:
     if context == "pets":
         return f"\n\n**Kopek/Kedi icin ideal**: {best.title} yasam puani {best.lifestyle_score or 0:.1f}/10 ile bahce ve cevre dostu. Parklar ve yesil alanlar yakin!"
     elif context == "family":
-        return f"\n\n**Aileniz icin**: {best.title} {best.room_count_total} oda, {best.area_m2:.0f} m² ile genis. Okullar ve oyun alanlari yakin."
+        return f"\n\n**Aileniz icin**: {best.title} {best.room_count_total} oda ile genis. Okullar ve oyun alanlari yakin."
     elif context == "student":
         return f"\n\n**Ogrenciye uygun**: {best.title} uygun fiyat ve merkezi konum. Sosyal yasam puani {best.lifestyle_score or 0:.1f}/10."
     elif context == "elderly":
@@ -639,7 +684,7 @@ def _contextual_explanation(context: str, picks: list[Listing]) -> str:
     elif context == "transport":
         return f"\n\n**Ulasim odakli**: {best.title} metro ve toplu tasima hatlarina yakin (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "studio":
-        return f"\n\n**Studyo/kucuk daire**: {best.title} pratik ve ekonomik, {best.area_m2:.0f} m² (yasam puani {best.lifestyle_score or 0:.1f}/10)."
+        return f"\n\n**Studyo/kucuk daire**: {best.title} pratik ve ekonomik (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     return ""
 
 
@@ -746,7 +791,7 @@ def build_reply(message: str, filters: ChatFilters, picks: list[Listing], total:
         compat_score = calculate_compatibility_score(l, filters)
         compat_str = f"uyum skoru {compat_score:.1f}/10 · " if compat_score is not None else ""
         lines.append(
-            f"{i}. **{l.title}** — {_format_price(l.price)} · {l.area_m2:.0f} m² · "
+            f"{i}. **{l.title}** — {_format_price(l.price)} · "
             f"{l.room_count_total} oda · {compat_str}yasam puani {score:.1f}/10 · fiyat {verdict}"
         )
 
@@ -762,7 +807,7 @@ def _llm_explain(message: str, filters: ChatFilters, picks: list[Listing], total
     def format_listing_for_llm(l):
         cs = calculate_compatibility_score(l, filters)
         cs_str = f", uyum skoru {cs:.1f}/10" if cs is not None else ""
-        return f"- {l.title}: {int(l.price)} TRY, {l.area_m2:.0f} m², {l.room_count_total} oda, {l.district}{cs_str}, yasam puani {l.lifestyle_score or 0:.1f}/10"
+        return f"- {l.title}: {int(l.price)} TRY, {l.room_count_total} oda, {l.district}{cs_str}, yasam puani {l.lifestyle_score or 0:.1f}/10"
 
     listings_text = "\n".join(format_listing_for_llm(l) for l in picks)
     prompt = (

@@ -261,12 +261,23 @@ def calculate_compatibility_score(listing: Listing, filters_obj) -> float | None
                 matched_weight += ratio * 30.0
 
     # 2. Rooms Match (weight = 25)
+    ideal_rooms = filters.get("ideal_rooms")
     min_rooms = filters.get("min_rooms")
     max_rooms = filters.get("max_rooms")
-    if min_rooms is not None or max_rooms is not None:
+    if ideal_rooms is not None or min_rooms is not None or max_rooms is not None:
         total_weight += 25.0
         rooms = listing.room_count_total or 0
-        if min_rooms is not None and max_rooms is not None:
+        if ideal_rooms is not None:
+            diff = abs(rooms - ideal_rooms)
+            if diff == 0:
+                matched_weight += 25.0
+            elif diff == 1:
+                matched_weight += 17.0
+            elif diff == 2:
+                matched_weight += 8.0
+            else:
+                matched_weight += 2.0
+        elif min_rooms is not None and max_rooms is not None:
             if min_rooms <= rooms <= max_rooms:
                 matched_weight += 25.0
             else:

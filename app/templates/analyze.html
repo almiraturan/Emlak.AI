@@ -159,6 +159,39 @@
         margin-top: 0.5rem;
         line-height: 1.6;
     }
+
+    /* ── Score circle: donut ring, readable number ── */
+    .score-circle {
+        position: relative !important;
+        background: conic-gradient(
+            from -90deg,
+            #10b981 0deg,
+            #10b981 calc(var(--score, 5) * 36deg),
+            rgba(13,148,136,0.12) calc(var(--score, 5) * 36deg)
+        ) !important;
+    }
+    .score-circle::after {
+        content: '';
+        position: absolute;
+        inset: 14px;
+        border-radius: 50%;
+        background: #0d1117;
+        z-index: 0;
+    }
+    .score-circle .score-value,
+    .score-circle .score-max {
+        position: relative;
+        z-index: 1;
+    }
+    .score-circle .score-value {
+        color: #ffffff !important;
+        font-size: 2rem !important;
+        line-height: 1;
+    }
+    .score-circle .score-max {
+        color: rgba(255,255,255,0.5) !important;
+        font-size: 0.75rem !important;
+    }
 </style>
 {% endblock %}
 
@@ -695,8 +728,16 @@
 
     function displayLifestyle(ls) {
         if (!ls) return;
-        const score = Math.round(ls.score ?? 5);
-        document.getElementById('lifestyleScore').textContent = score;
+        const score = ls.score != null ? Math.round(ls.score) : null;
+        const scoreEl = document.getElementById('lifestyleScore');
+        const circleEl = document.querySelector('.score-circle');
+        if (score != null) {
+            scoreEl.textContent = score;
+            circleEl.style.setProperty('--score', score);
+        } else {
+            scoreEl.textContent = '—';
+            circleEl.style.setProperty('--score', 0);
+        }
         document.getElementById('lifestyleDescription').textContent = ls.description || '—';
 
         const pois = ls.poi_counts || {};

@@ -257,10 +257,11 @@ Places: {poi_text}"""
                 logger.debug("No POIs found, using rule-based scoring")
 
             # Fallback: Rule-based scoring
-            score = self._calculate_rule_based_score(pois)
+            total_pois = sum(pois.values())
+            score = self._calculate_rule_based_score(pois) if total_pois > 0 else None
             return {
                 "score": score,
-                "description": f"{sum(pois.values())} yakın nokta bulundu" if sum(pois.values()) > 0 else "Yakında nokta bulunamadı",
+                "description": f"{total_pois} yakın nokta bulundu" if total_pois > 0 else "Konum verisi alınıyor...",
                 "poi_counts": pois,
                 "nearest_distances_km": nearest_distances_km,
                 "poi_names": poi_names,
