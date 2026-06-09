@@ -158,6 +158,13 @@ def notify_high_lifestyle_listing(db: Session, listing: Listing) -> int:
         .all()
     )
 
+    # Filter by room count preference
+    if listing.room_count_total:
+        subscribers = [
+            s for s in subscribers
+            if s.min_room_count is None or s.min_room_count == listing.room_count_total
+        ]
+
     if not subscribers:
         return 0
 
@@ -192,17 +199,18 @@ def notify_high_lifestyle_listing(db: Session, listing: Listing) -> int:
     return sent_count
 
 
-def subscribe_email(db: Session, email: str, user_id: int, min_lifestyle: int = 8) -> bool:
+def subscribe_email(db: Session, email: str, user_id: int, min_lifestyle: int = 8, min_room_count: int | None = None) -> bool:
     """Subscribe a user to high-lifestyle listing notifications."""
     try:
         existing = db.query(UserEmailPreference).filter(UserEmailPreference.email == email).first()
         if existing:
             existing.subscribed = True
             existing.min_lifestyle_score = min_lifestyle
+            existing.min_room_count = min_room_count
             db.commit()
             return True
 
-        pref = UserEmailPreference(email=email, user_id=user_id, min_lifestyle_score=min_lifestyle)
+        pref = UserEmailPreference(email=email, user_id=user_id, min_lifestyle_score=min_lifestyle, min_room_count=min_room_count)
         db.add(pref)
         db.commit()
         return True
@@ -233,5 +241,6 @@ def get_subscription_status(db: Session, email: str) -> Optional[dict]:
         "email": pref.email,
         "subscribed": pref.subscribed,
         "min_lifestyle_score": pref.min_lifestyle_score,
+        "min_room_count": pref.min_room_count,
         "created_at": pref.created_at,
     }

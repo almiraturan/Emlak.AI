@@ -9,6 +9,16 @@
         <p>Veritabanındaki tüm aktif ilanlar</p>
         <div class="listings-controls">
             <input type="text" id="searchInput" placeholder="Arama..." class="search-input">
+            <select id="roomFilter" class="sort-select">
+                <option value="">Tüm Odalar</option>
+                <option value="2">1+1</option>
+                <option value="3">2+1</option>
+                <option value="4">3+1</option>
+                <option value="5">4+1</option>
+                <option value="6">5+1</option>
+                <option value="7">6+1</option>
+                <option value="8">7+1</option>
+            </select>
             <select id="sortSelect" class="sort-select">
                 <option value="recent">Son Eklenen</option>
                 <option value="price-asc">Fiyat (Düşük)</option>
@@ -56,7 +66,7 @@
 
     .listings-controls {
         display: grid;
-        grid-template-columns: minmax(220px, 1fr) minmax(180px, 220px) auto;
+        grid-template-columns: minmax(220px, 1fr) minmax(130px, 170px) minmax(130px, 180px) auto;
         gap: 0.75rem;
         align-items: center;
     }
@@ -356,6 +366,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
         await loadListings();
         document.getElementById('searchInput').addEventListener('input', () => { currentPage = 1; filterListings(); });
+        document.getElementById('roomFilter').addEventListener('change', () => { currentPage = 1; filterListings(); });
         document.getElementById('sortSelect').addEventListener('change', () => { currentPage = 1; filterListings(); });
     });
 
@@ -379,12 +390,15 @@
     function filterListings() {
         const searchTerm = document.getElementById('searchInput').value.toLowerCase();
         const sortBy = document.getElementById('sortSelect').value;
+        const roomVal = document.getElementById('roomFilter').value;
 
         let filtered = allListings.filter(listing => {
             const title = (listing.title || '').toLowerCase();
             const district = (listing.district || '').toLowerCase();
             const city = (listing.city || '').toLowerCase();
-            return title.includes(searchTerm) || district.includes(searchTerm) || city.includes(searchTerm);
+            const matchSearch = title.includes(searchTerm) || district.includes(searchTerm) || city.includes(searchTerm);
+            const matchRoom = !roomVal || (listing.room_count_total == parseInt(roomVal));
+            return matchSearch && matchRoom;
         });
 
         switch(sortBy) {

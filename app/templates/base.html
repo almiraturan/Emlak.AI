@@ -37,9 +37,7 @@
             </ul>
             <div class="navbar-actions">
                 <div class="navbar-user-dropdown" onclick="toggleDropdown(event)">
-                    <span style="font-size: 0.95rem; opacity: 0.85;">👤</span>
                     <span id="activeUserName">-</span>
-                    <span class="dropdown-arrow">∨</span>
                     <div class="user-dropdown-menu" id="userDropdownMenu" hidden>
                         <a href="/profile">👤 Profilim</a>
                         <a href="/saved">❤️ Kaydedilen Evler</a>
@@ -84,18 +82,12 @@
             if (event) event.stopPropagation();
             const menu = document.getElementById('userDropdownMenu');
             menu.hidden = !menu.hidden;
-            const arrow = document.querySelector('.dropdown-arrow');
-            if (arrow) {
-                arrow.style.transform = menu.hidden ? 'rotate(0deg)' : 'rotate(180deg)';
-            }
         }
 
         window.addEventListener('click', () => {
             const menu = document.getElementById('userDropdownMenu');
             if (menu && !menu.hidden) {
                 menu.hidden = true;
-                const arrow = document.querySelector('.dropdown-arrow');
-                if (arrow) arrow.style.transform = 'rotate(0deg)';
             }
         });
 

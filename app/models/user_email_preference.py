@@ -14,6 +14,7 @@ class UserEmailPreference(Base):
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     subscribed: Mapped[bool] = mapped_column(Boolean, default=True)
     min_lifestyle_score: Mapped[int] = mapped_column(Integer, default=8)
+    min_room_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
     last_notification_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

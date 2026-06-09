@@ -20,18 +20,20 @@ class EmailSubscribeRequest(BaseModel):
     email: EmailStr
     user_id: int = 1
     min_lifestyle_score: int = 8
+    min_room_count: int | None = None
 
 
 class EmailStatusResponse(BaseModel):
     email: str
     subscribed: bool
     min_lifestyle_score: int
+    min_room_count: int | None = None
 
 
 @router.post("/subscribe", response_model=EmailStatusResponse)
 def subscribe(req: EmailSubscribeRequest, db: Session = Depends(get_db)):
     """Subscribe to high-lifestyle listing notifications."""
-    success = subscribe_email(db, req.email, req.user_id, req.min_lifestyle_score)
+    success = subscribe_email(db, req.email, req.user_id, req.min_lifestyle_score, req.min_room_count)
     if not success:
         raise HTTPException(status_code=400, detail="Failed to subscribe")
 

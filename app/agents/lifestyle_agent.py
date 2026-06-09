@@ -228,7 +228,7 @@ class LifestyleAgent(BaseAgent):
             )
 
             # Step 2: Augmented Generation - send to LLM (if available)
-            if sum(pois.values()) > 0 and self.is_ollama_available():
+            if sum(pois.values()) > 0 and self.is_llm_available():
                 # Format POI list for LLM
                 poi_text = ", ".join(
                     [f"{k}: {v}" for k, v in pois.items() if v > 0]
@@ -513,9 +513,10 @@ Places: {poi_text}"""
                 weight = POI_WEIGHTS.get(poi_type, 1.0)
                 total_score += min(count, 5) * weight
 
-            # Normalize to 1-10 scale
-            normalized_score = min(10.0, 1.0 + (total_score / 10.0))
-            return float(normalized_score)
+            # Max possible: 5 * sum(all weights) = 5 * 10.5 = 52.5
+            max_possible = 5.0 * sum(POI_WEIGHTS.values())
+            normalized_score = 1.0 + (total_score / max_possible) * 9.0
+            return round(min(10.0, max(1.0, normalized_score)), 1)
         except Exception as e:
             logger.error(f"Error in rule-based scoring: {e}")
             return 5.0
