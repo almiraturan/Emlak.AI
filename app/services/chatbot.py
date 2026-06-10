@@ -81,6 +81,8 @@ _METRO_WORDS = ("metro", "metrobus", "tramvay", "rayli sistem", "metro duragi", 
 _BUS_WORDS = ("otobus", "dolmus", "minibus", "otobus duragi", "otobuse", "otobusle", "dolmusa")
 _TRANSPORT_WORDS = ("ulasim", "toplu tasima", "durak", "istasyon", "toplu tasimaya", "toplu tasimayla", "tasimaya biniyorum", "tasimayla gidiyorum")
 _NEWLYWED_WORDS = ("yeni evli", "yeni evlendik", "nisanliyiz", "nisanlandi", "evleniyoruz", "evliyoruz", "cift olarak", "iki kisilik yasam")
+_WALK_WORDS = ("yuruyus", "yurumeliyim", "yuruyebil", "yuruyeceg", "yurumek istiyor", "yurumek lazim", "kosu", "kosmak", "spor yap", "bisiklet", "hava al", "aktif yasam", "acik alan", "yesil alan istiyor", "parkta yuruy")
+_PERSONAL_HEALTH_WORDS = ("diyalizim", "diyaliz var", "diyalize", "astimim", "astim var", "kalp hastasiyim", "kalp sorunu", "kalbim hasta", "kronik hastayim", "kronik hastalik", "tedaviye gidiyorum", "saglik sorunum var", "saglik durumum", "hastaneye gidiyorum", "duzenli tedavi", "duzensiz nabiz", "kanserim", "seker hastasiyim", "tansiyonum", "diyabetim")
 
 # Turkish number words → int (Turkish only)
 _TR_NUMS: dict[str, int] = {
@@ -383,6 +385,27 @@ def parse_message(message: str) -> ChatFilters:
         f.context = "elderly"
         f.needs_hospital_nearby = True
 
+    # --- Walking / outdoor exercise → park nearby ---
+    if any(w in text for w in _WALK_WORDS):
+        f.needs_park_nearby = True
+        f.min_lifestyle = max(f.min_lifestyle or 0, 7.0)
+        if "park yakını" not in f.keywords:
+            f.keywords.append("park yakını")
+        if "yürüyüş dostu" not in f.keywords:
+            f.keywords.append("yürüyüş dostu")
+        if not f.context:
+            f.context = "walking"
+
+    # --- Personal health condition → hospital nearby ---
+    if any(w in text for w in _PERSONAL_HEALTH_WORDS):
+        f.needs_hospital_nearby = True
+        f.min_lifestyle = max(f.min_lifestyle or 0, 7.0)
+        for kw in ("hastane yakını", "sağlık hizmetleri"):
+            if kw not in f.keywords:
+                f.keywords.append(kw)
+        if not f.context:
+            f.context = "health"
+
     # --- Remote work ---
     if any(w in text for w in _REMOTE_WORDS):
         if "evden çalışma" not in f.keywords:
@@ -573,7 +596,7 @@ def match_listings(db: Session, filters: ChatFilters, limit: int = 5) -> list[Li
         q = q.filter(Listing.building_age <= filters.max_building_age)
 
     # If the user has specific school or hospital requirements, fetch more candidates and sort by POI distance
-    is_hospital_req = filters.context == "elderly_care" or "hastane yakını" in filters.keywords
+    is_hospital_req = filters.context in ("elderly_care", "health") or "hastane yakını" in filters.keywords
     is_school_req = filters.context == "family_kids" or "okul yakını" in filters.keywords
 
     if is_hospital_req or is_school_req:
@@ -685,6 +708,10 @@ def _contextual_explanation(context: str, picks: list[Listing]) -> str:
         return f"\n\n**Ulasim odakli**: {best.title} metro ve toplu tasima hatlarina yakin (yasam puani {best.lifestyle_score or 0:.1f}/10)."
     elif context == "studio":
         return f"\n\n**Studyo/kucuk daire**: {best.title} pratik ve ekonomik (yasam puani {best.lifestyle_score or 0:.1f}/10)."
+    elif context == "walking":
+        return f"\n\n**Yuruyus/spor icin ideal**: {best.title} parklar ve yesil alanlara yakin, yasam puani {best.lifestyle_score or 0:.1f}/10."
+    elif context == "health":
+        return f"\n\n**Saglik dostu konum**: {best.title} hastane ve saglik merkezlerine yakin, yasam puani {best.lifestyle_score or 0:.1f}/10."
     return ""
 
 

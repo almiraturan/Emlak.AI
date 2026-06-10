@@ -334,6 +334,15 @@
                         <div class="poi-nearest" id="parkDistance">-</div>
                         <div class="poi-list" id="parkNames">-</div>
                     </div>
+                    <div class="poi-item" id="poiSupermarket">
+                        <div class="poi-header">
+                            <span class="poi-icon">🛒</span>
+                            <span class="poi-name">Marketler</span>
+                            <span class="poi-count" id="supermarketCount">-</span>
+                        </div>
+                        <div class="poi-nearest" id="supermarketDistance">-</div>
+                        <div class="poi-list" id="supermarketNames">-</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -776,6 +785,7 @@
         document.getElementById('busCount').textContent = pois.bus ?? 0;
         document.getElementById('metroCount').textContent = pois.subway ?? 0;
         document.getElementById('parkCount').textContent = pois.park ?? 0;
+        document.getElementById('supermarketCount').textContent = pois.supermarket ?? 0;
 
         // Per-category nearest distance label
         const fmtNearest = (d, countR, count) => {
@@ -793,16 +803,19 @@
             fmtNearest(distances.subway, radii.subway ?? 1, pois.subway ?? 0);
         document.getElementById('parkDistance').textContent =
             fmtNearest(distances.park, radii.park ?? 1, pois.park ?? 0);
+        document.getElementById('supermarketDistance').textContent =
+            fmtNearest(distances.supermarket, radii.supermarket ?? 2, pois.supermarket ?? 0);
 
         // Name lists
         document.getElementById('hospitalNames').innerHTML = formatPoiNames(names.hospital, distances.hospital);
         document.getElementById('busNames').innerHTML = formatPoiNames(names.bus, distances.bus);
         document.getElementById('metroNames').innerHTML = formatPoiNames(names.subway, distances.subway);
         document.getElementById('parkNames').innerHTML = formatPoiNames(names.park, distances.park);
+        document.getElementById('supermarketNames').innerHTML = formatPoiNames(names.supermarket, distances.supermarket);
 
         // Meta info: show per-category radii
         document.getElementById('lifestyleMeta').textContent =
-            `Okul: ${radii.school ?? 1} km  ·  Hastane: ${radii.hospital ?? 3} km  ·  Otobüs: ${radii.bus ?? 1} km  ·  Metro: ${radii.subway ?? 1} km  ·  Park: ${radii.park ?? 1} km`;
+            `Okul: ${radii.school ?? 1} km  ·  Hastane: ${radii.hospital ?? 3} km  ·  Otobüs: ${radii.bus ?? 1} km  ·  Metro: ${radii.subway ?? 1} km  ·  Park: ${radii.park ?? 1} km  ·  Market: ${radii.supermarket ?? 2} km`;
     }
 
 
